@@ -40,6 +40,15 @@ declare(strict_types=1);
 
     <!-- Custom Obsidian & Saffron Styles -->
     <link rel="stylesheet" href="assets/css/style.css">
+    <script>
+        (function () {
+            try {
+                const savedTheme = localStorage.getItem('literos_theme') || 'dark';
+                document.documentElement.classList.remove('dark', 'light');
+                document.documentElement.classList.add(savedTheme === 'light' ? 'light' : 'dark');
+            } catch (_) {}
+        })();
+    </script>
 
     <!-- Chart.js 4 for Interactive Financial & Analytical Charts -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -97,6 +106,15 @@ declare(strict_types=1);
                 <i class="fa-regular fa-clock text-amber-400"></i>
                 <span id="liveClockDisplay">--:--:--</span>
             </div>
+
+            <button type="button"
+                    id="themeToggleBtn"
+                    onclick="LiterosApp.toggleTheme()"
+                    title="Switch between Dark Mode and Light Mode"
+                    class="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-white/10 text-xs font-bold text-slate-200 transition">
+                <i id="themeToggleIcon" class="fa-solid fa-sun text-amber-400"></i>
+                <span id="themeToggleLabel" class="hidden xl:inline">Light Mode</span>
+            </button>
 
             <button onclick="LiterosApp.logoutSession()"
                     title="Lock POS & Sign Out to Login Screen"
@@ -1629,15 +1647,25 @@ declare(strict_types=1);
             <div class="lg:col-span-5 p-7 sm:p-8 flex flex-col justify-between border-b lg:border-b-0 lg:border-r border-white/10 bg-gradient-to-b from-slate-900/90 to-slate-950">
                 <div>
                     <!-- Brand Header -->
-                    <div class="flex items-center gap-3 mb-6">
-                        <div id="loginBrandLogo"
-                             class="w-11 h-11 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-slate-950 font-extrabold text-base flex items-center justify-center shadow-lg shadow-amber-500/25">
-                            SD
+                    <div class="flex items-center justify-between gap-3 mb-6">
+                        <div class="flex items-center gap-3">
+                            <div id="loginBrandLogo"
+                                 class="w-11 h-11 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-slate-950 font-extrabold text-base flex items-center justify-center shadow-lg shadow-amber-500/25">
+                                SD
+                            </div>
+                            <div>
+                                <h2 id="loginBrandName" class="text-base font-extrabold text-white tracking-tight">Shakes and Dessert</h2>
+                                <p class="text-[11px] text-amber-400 font-medium">Kumasi, Ghana • Owner: Hajia Rabi Adam</p>
+                            </div>
                         </div>
-                        <div>
-                            <h2 id="loginBrandName" class="text-base font-extrabold text-white tracking-tight">Shakes and Dessert</h2>
-                            <p class="text-[11px] text-amber-400 font-medium">Kumasi, Ghana • Owner: Hajia Rabi Adam</p>
-                        </div>
+                        <button type="button"
+                                id="loginThemeToggleBtn"
+                                onclick="LiterosApp.toggleTheme()"
+                                title="Switch between Dark Mode and Light Mode"
+                                class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-white/10 text-[11px] font-bold text-slate-200 transition shrink-0">
+                            <i id="loginThemeToggleIcon" class="fa-solid fa-sun text-amber-400"></i>
+                            <span id="loginThemeToggleLabel">Light</span>
+                        </button>
                     </div>
 
                     <form id="loginAuthForm" onsubmit="LiterosApp.submitLoginScreen(event)" class="space-y-4">

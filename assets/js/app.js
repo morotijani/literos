@@ -7,6 +7,7 @@
 const LiterosApp = (() => {
     const state = {
         driver: 'mysql',
+        theme: 'dark',
         activeTab: 'pos',
         activeBranchId: 1,
         activeStaff: null,
@@ -228,13 +229,72 @@ const LiterosApp = (() => {
     }
 
     // =========================================================================
-    // INITIALIZATION & BOOTSTRAP
+    // INITIALIZATION, THEME ENGINE & BOOTSTRAP
     // =========================================================================
     async function init() {
+        initTheme();
         await loadBootstrap();
         restoreAuthSession();
         setupClock();
         setupKeyboardShortcuts();
+    }
+
+    function initTheme() {
+        let saved = 'dark';
+        try {
+            saved = localStorage.getItem('literos_theme') || 'dark';
+        } catch (_) {}
+        applyTheme(saved === 'light' ? 'light' : 'dark', false);
+    }
+
+    function applyTheme(theme, notify = false) {
+        const nextTheme = theme === 'light' ? 'light' : 'dark';
+        state.theme = nextTheme;
+
+        const root = document.documentElement;
+        root.classList.remove('dark', 'light');
+        root.classList.add(nextTheme);
+
+        try {
+            localStorage.setItem('literos_theme', nextTheme);
+        } catch (_) {}
+
+        // Update Top Bar & Login Screen theme toggle buttons
+        const isLight = nextTheme === 'light';
+        const topIcon = document.getElementById('themeToggleIcon');
+        const topLabel = document.getElementById('themeToggleLabel');
+        if (topIcon) {
+            topIcon.className = isLight
+                ? 'fa-solid fa-moon text-indigo-400'
+                : 'fa-solid fa-sun text-amber-400';
+        }
+        if (topLabel) {
+            topLabel.textContent = isLight ? 'Dark Mode' : 'Light Mode';
+        }
+
+        const loginIcon = document.getElementById('loginThemeToggleIcon');
+        const loginLabel = document.getElementById('loginThemeToggleLabel');
+        if (loginIcon) {
+            loginIcon.className = isLight
+                ? 'fa-solid fa-moon text-indigo-400'
+                : 'fa-solid fa-sun text-amber-400';
+        }
+        if (loginLabel) {
+            loginLabel.textContent = isLight ? 'Dark' : 'Light';
+        }
+
+        if (latestReportData && state.activeTab === 'reports') {
+            renderReportCharts(latestReportData);
+        }
+
+        if (notify) {
+            toast(`Switched to ${isLight ? 'Light' : 'Dark'} Mode theme`, 'info');
+        }
+    }
+
+    function toggleTheme() {
+        const next = state.theme === 'light' ? 'dark' : 'light';
+        applyTheme(next, true);
     }
 
     function restoreAuthSession() {
@@ -2253,7 +2313,11 @@ const LiterosApp = (() => {
     function renderReportCharts(data) {
         if (typeof Chart === 'undefined') return;
 
-        Chart.defaults.color = '#94a3b8';
+        const isLight = state.theme === 'light';
+        const gridColor = isLight ? 'rgba(15, 23, 42, 0.06)' : 'rgba(255, 255, 255, 0.05)';
+        const sliceBorderColor = isLight ? '#ffffff' : '#090b10';
+
+        Chart.defaults.color = isLight ? '#475569' : '#94a3b8';
         Chart.defaults.font.family = '"Plus Jakarta Sans", sans-serif';
 
         // 1. Daily/Monthly Revenue, Gross Profit & Expenditures Trend Chart
@@ -2304,8 +2368,8 @@ const LiterosApp = (() => {
                         legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } }
                     },
                     scales: {
-                        x: { grid: { color: 'rgba(255,255,255,0.04)' } },
-                        y: { grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true }
+                        x: { grid: { color: gridColor } },
+                        y: { grid: { color: gridColor }, beginAtZero: true }
                     }
                 }
             });
@@ -2323,7 +2387,7 @@ const LiterosApp = (() => {
                     datasets: [{
                         data: pList.map(p => p.amount),
                         backgroundColor: ['#10b981', '#facc15', '#06b6d4', '#f59e0b', '#8b5cf6'],
-                        borderColor: '#090b10',
+                        borderColor: sliceBorderColor,
                         borderWidth: 2
                     }]
                 },
@@ -2350,7 +2414,7 @@ const LiterosApp = (() => {
                     datasets: [{
                         data: tList.map(t => t.amount),
                         backgroundColor: ['#f59e0b', '#06b6d4', '#ec4899'],
-                        borderColor: '#090b10',
+                        borderColor: sliceBorderColor,
                         borderWidth: 2
                     }]
                 },
@@ -2396,8 +2460,8 @@ const LiterosApp = (() => {
                         legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } }
                     },
                     scales: {
-                        x: { grid: { color: 'rgba(255,255,255,0.04)' } },
-                        y: { grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true }
+                        x: { grid: { color: gridColor } },
+                        y: { grid: { color: gridColor }, beginAtZero: true }
                     }
                 }
             });
@@ -2782,6 +2846,7 @@ const LiterosApp = (() => {
 
     return {
         init,
+        toggleTheme,
         switchTab,
         switchBranch,
         setPosCategory,
