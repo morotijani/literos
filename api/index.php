@@ -37,6 +37,29 @@ function respond(array $data, int $status = 200): void {
     exit;
 }
 
+/**
+ * Resolve the currently acting operator from payload or query string and enforce allowed roles.
+ */
+function requireRoles(PDO $pdo, array $payload, array $allowedRoles): array {
+    $actorId = (int)($payload['actor_staff_id'] ?? $_GET['actor_staff_id'] ?? 0);
+    if ($actorId <= 0) {
+        respond(['error' => 'Authentication required: please sign in to perform this action.'], 401);
+    }
+    $stmt = $pdo->prepare("SELECT * FROM staff WHERE id = ? AND is_active = 1 LIMIT 1");
+    $stmt->execute([$actorId]);
+    $actor = $stmt->fetch();
+    if (!$actor) {
+        respond(['error' => 'Active operator session not found. Please sign in again.'], 401);
+    }
+    if (!in_array($actor['role'], $allowedRoles, true)) {
+        $rolesStr = implode(', ', $allowedRoles);
+        respond([
+            'error' => "Access Denied: Your role ({$actor['role']}) does not have permission for this action. Required role: {$rolesStr}."
+        ], 403);
+    }
+    return $actor;
+}
+
 try {
     switch ($action) {
         // =====================================================================
@@ -177,9 +200,10 @@ try {
         // 2. POS: CREATE ORDER / CHECKOUT
         // =====================================================================
         case 'create_order':
-            $branchId = (int)($payload['branch_id'] ?? 1);
+            $actor = requireRoles($pdo, $payload, ['Admin', 'Manager', 'Cashier', 'Waiter']);
+            $branchId = (int)($payload['branch_id'] ?? $actor['branch_id'] ?? 1);
             $tableId = !empty($payload['table_id']) ? (int)$payload['table_id'] : null;
-            $staffId = (int)($payload['staff_id'] ?? 1);
+            $staffId = (int)$actor['id'];
             $customerName = trim((string)($payload['customer_name'] ?? 'Walk-in Guest')) ?: 'Walk-in Guest';
             $guestsCount = max(1, (int)($payload['guests_count'] ?? 1));
             $orderType = in_array($payload['order_type'] ?? '', ['Dine-In', 'Takeaway', 'Delivery'], true)
@@ -188,6 +212,11 @@ try {
             $paymentStatus = in_array($payload['payment_status'] ?? '', ['Paid', 'Unpaid'], true)
                 ? $payload['payment_status']
                 : 'Paid';
+
+            // Waiter role can only fire unpaid orders to Kitchen; Cashier/Manager/Admin settle payments
+            if ($actor['role'] === 'Waiter' && $paymentStatus === 'Paid') {
+                respond(['error' => 'Role Restriction: Waiters can send tickets to the Kitchen, while Cashiers or Managers settle payments.'], 403);
+            }
             $paymentMethod = in_array($payload['payment_method'] ?? '', ['Cash', 'Card', 'QR Pay', 'Split'], true)
                 ? $payload['payment_method']
                 : 'Card';
@@ -324,6 +353,7 @@ try {
         // 3. KITCHEN DISPLAY (KDS) & ORDER STATUS UPDATES
         // =====================================================================
         case 'update_order_status':
+            requireRoles($pdo, $payload, ['Admin', 'Manager', 'Chef', 'Cashier', 'Waiter']);
             $orderId = (int)($payload['order_id'] ?? 0);
             $newStatus = (string)($payload['status'] ?? '');
             $validStatuses = ['Pending', 'Preparing', 'Ready', 'Served', 'Completed', 'Cancelled'];
@@ -362,6 +392,7 @@ try {
             break;
 
         case 'settle_order_payment':
+            requireRoles($pdo, $payload, ['Admin', 'Manager', 'Cashier']);
             $orderId = (int)($payload['order_id'] ?? 0);
             $paymentMethod = (string)($payload['payment_method'] ?? 'Card');
             $tipAmount = max(0, (float)($payload['tip_amount'] ?? 0));
@@ -390,6 +421,7 @@ try {
         // 4. FLOOR PLAN & TABLE MANAGEMENT
         // =====================================================================
         case 'update_table_status':
+            requireRoles($pdo, $payload, ['Admin', 'Manager', 'Cashier', 'Waiter']);
             $tableId = (int)($payload['table_id'] ?? 0);
             $status = (string)($payload['status'] ?? 'Available');
             $guests = max(0, (int)($payload['current_guests'] ?? 0));
@@ -410,6 +442,7 @@ try {
             break;
 
         case 'save_table':
+            requireRoles($pdo, $payload, ['Admin', 'Manager']);
             $id = (int)($payload['id'] ?? 0);
             $branchId = (int)($payload['branch_id'] ?? 1);
             $tableNumber = strtoupper(trim((string)($payload['table_number'] ?? '')));
@@ -435,6 +468,7 @@ try {
         // 5. MENU & CATEGORY STUDIO
         // =====================================================================
         case 'save_menu_item':
+            requireRoles($pdo, $payload, ['Admin', 'Manager']);
             $id = (int)($payload['id'] ?? 0);
             $categoryId = (int)($payload['category_id'] ?? 1);
             $sku = strtoupper(trim((string)($payload['sku'] ?? '')));
@@ -496,6 +530,7 @@ try {
             break;
 
         case 'toggle_menu_availability':
+            requireRoles($pdo, $payload, ['Admin', 'Manager', 'Chef']);
             $id = (int)($payload['id'] ?? 0);
             $pdo->prepare("UPDATE menu_items SET is_available = CASE WHEN is_available = 1 THEN 0 ELSE 1 END WHERE id = ?")
                 ->execute([$id]);
@@ -503,6 +538,7 @@ try {
             break;
 
         case 'restock_menu_item':
+            requireRoles($pdo, $payload, ['Admin', 'Manager', 'Chef']);
             $id = (int)($payload['id'] ?? 0);
             $addQty = max(1, (int)($payload['add_qty'] ?? 25));
             $pdo->prepare("UPDATE menu_items SET stock_qty = stock_qty + ?, is_available = 1 WHERE id = ?")
@@ -511,12 +547,14 @@ try {
             break;
 
         case 'delete_menu_item':
+            requireRoles($pdo, $payload, ['Admin', 'Manager']);
             $id = (int)($payload['id'] ?? 0);
             $pdo->prepare("DELETE FROM menu_items WHERE id = ?")->execute([$id]);
             respond(['message' => 'Menu item deleted']);
             break;
 
         case 'save_category':
+            requireRoles($pdo, $payload, ['Admin', 'Manager']);
             $name = trim((string)($payload['name'] ?? ''));
             $icon = trim((string)($payload['icon'] ?? 'fa-utensils'));
             $color = trim((string)($payload['color'] ?? '#f59e0b'));
@@ -533,6 +571,7 @@ try {
         // 6. SALES PERSONNEL / STAFF MANAGEMENT & PIN VERIFICATION
         // =====================================================================
         case 'save_staff':
+            requireRoles($pdo, $payload, ['Admin', 'Manager']);
             $id = (int)($payload['id'] ?? 0);
             $branchId = (int)($payload['branch_id'] ?? 1);
             $empCode = strtoupper(trim((string)($payload['employee_code'] ?? '')));
@@ -648,6 +687,7 @@ try {
         // 7. BRANCHES & COMPANY PROFILE
         // =====================================================================
         case 'save_branch':
+            requireRoles($pdo, $payload, ['Admin']);
             $id = (int)($payload['id'] ?? 0);
             $code = strtoupper(trim((string)($payload['code'] ?? '')));
             $name = trim((string)($payload['name'] ?? ''));
@@ -697,6 +737,7 @@ try {
             break;
 
         case 'save_company_profile':
+            requireRoles($pdo, $payload, ['Admin']);
             $name = trim((string)($payload['name'] ?? ''));
             $tagline = trim((string)($payload['tagline'] ?? ''));
             $logoText = trim((string)($payload['logo_text'] ?? 'LR'));
@@ -728,6 +769,7 @@ try {
             break;
 
         case 'reset_demo_data':
+            requireRoles($pdo, $payload, ['Admin']);
             Database::resetAndSeed();
             respond(['message' => 'Demo database reset to fresh factory state']);
             break;
@@ -736,9 +778,14 @@ try {
         // 8. FULL BUSINESS INTELLIGENCE & FINANCIAL REPORTS ENGINE
         // =====================================================================
         case 'reports_query':
+            $actor = requireRoles($pdo, $payload, ['Admin', 'Manager']);
             $fromDate = trim((string)($_GET['from_date'] ?? $payload['from_date'] ?? ''));
             $toDate = trim((string)($_GET['to_date'] ?? $payload['to_date'] ?? ''));
             $branchId = (int)($_GET['branch_id'] ?? $payload['branch_id'] ?? 0);
+            // Branch Managers are scoped to their own branch
+            if ($actor['role'] === 'Manager') {
+                $branchId = (int)$actor['branch_id'];
+            }
             $orderType = trim((string)($_GET['order_type'] ?? $payload['order_type'] ?? 'all'));
             $paymentMethod = trim((string)($_GET['payment_method'] ?? $payload['payment_method'] ?? 'all'));
             $paymentStatus = trim((string)($_GET['payment_status'] ?? $payload['payment_status'] ?? 'all'));

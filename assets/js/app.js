@@ -51,15 +51,86 @@ const LiterosApp = (() => {
     };
 
     // =========================================================================
-    // API & UTILITIES
+    // ROLE-BASED ACCESS CONTROL (RBAC) MATRIX & API UTILITIES
     // =========================================================================
+    const ROLE_PERMISSIONS = {
+        Admin: {
+            label: 'Executive Admin (Full Access)',
+            tabs: ['pos', 'kds', 'tables', 'sales', 'reports', 'menu', 'staff', 'branches', 'company'],
+            defaultTab: 'pos',
+            canSettlePayment: true,
+            canApplyDiscount: true,
+            canManageMenu: true,
+            canAddTable: true,
+            canSwitchBranch: true,
+            ownOrdersOnly: false
+        },
+        Manager: {
+            label: 'Branch Manager (Branch Operations & BI)',
+            tabs: ['pos', 'kds', 'tables', 'sales', 'reports', 'menu', 'staff'],
+            defaultTab: 'pos',
+            canSettlePayment: true,
+            canApplyDiscount: true,
+            canManageMenu: true,
+            canAddTable: true,
+            canSwitchBranch: false,
+            ownOrdersOnly: false
+        },
+        Cashier: {
+            label: 'POS Cashier (Register, Billing & Tables)',
+            tabs: ['pos', 'tables', 'sales'],
+            defaultTab: 'pos',
+            canSettlePayment: true,
+            canApplyDiscount: true,
+            canManageMenu: false,
+            canAddTable: false,
+            canSwitchBranch: false,
+            ownOrdersOnly: false
+        },
+        Waiter: {
+            label: 'Floor Waiter (Tables, Order Taking & Own Checks)',
+            tabs: ['pos', 'tables', 'kds', 'sales'],
+            defaultTab: 'tables',
+            canSettlePayment: false,
+            canApplyDiscount: false,
+            canManageMenu: false,
+            canAddTable: false,
+            canSwitchBranch: false,
+            ownOrdersOnly: true
+        },
+        Chef: {
+            label: 'Head Chef (Kitchen Display & 86/Stock Control)',
+            tabs: ['kds', 'menu'],
+            defaultTab: 'kds',
+            canSettlePayment: false,
+            canApplyDiscount: false,
+            canManageMenu: false,
+            canAddTable: false,
+            canSwitchBranch: false,
+            ownOrdersOnly: false
+        }
+    };
+
+    function getCurrentRoleConfig() {
+        const role = state.activeStaff?.role || 'Waiter';
+        return ROLE_PERMISSIONS[role] || ROLE_PERMISSIONS.Waiter;
+    }
+
     async function api(action, payload = null, queryParams = '') {
-        const url = `api/index.php?action=${encodeURIComponent(action)}${queryParams}`;
-        const options = payload
+        const actorId = state.activeStaff?.id || 0;
+        const actorParam = actorId ? `&actor_staff_id=${actorId}` : '';
+        const url = `api/index.php?action=${encodeURIComponent(action)}${actorParam}${queryParams}`;
+
+        let bodyObj = payload;
+        if (payload && typeof payload === 'object' && !payload.actor_staff_id && actorId) {
+            bodyObj = { ...payload, actor_staff_id: actorId };
+        }
+
+        const options = bodyObj
             ? {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
+                body: JSON.stringify(bodyObj)
             }
             : { method: 'GET' };
 
@@ -195,6 +266,7 @@ const LiterosApp = (() => {
     }
 
     function renderAll() {
+        applyRolePermissions();
         renderTopBar();
         renderLoginCredentialsScreen();
         renderPosView();
@@ -207,8 +279,76 @@ const LiterosApp = (() => {
         renderBranchesView();
         renderCompanyView();
         updateBadgeCounts();
-        if (state.activeTab === 'reports') {
+        if (state.activeTab === 'reports' && getCurrentRoleConfig().tabs.includes('reports')) {
             loadReportsData();
+        }
+    }
+
+    function applyRolePermissions() {
+        const cfg = getCurrentRoleConfig();
+
+        // 1. Show/hide navigation buttons based on role's allowed tabs
+        document.querySelectorAll('.nav-btn').forEach(btn => {
+            const tab = btn.dataset.tab;
+            const allowed = cfg.tabs.includes(tab);
+            btn.classList.toggle('hidden', !allowed);
+        });
+
+        // Show/hide Management section header in sidebar
+        const hasMgmtTabs = cfg.tabs.some(t => ['menu', 'staff', 'branches', 'company'].includes(t));
+        const mgmtDivider = document.getElementById('navManagementDivider');
+        if (mgmtDivider) {
+            mgmtDivider.classList.toggle('hidden', !hasMgmtTabs);
+        }
+
+        // 2. If current activeTab is not allowed for this role, redirect to role's defaultTab
+        if (!cfg.tabs.includes(state.activeTab)) {
+            state.activeTab = cfg.defaultTab;
+            document.querySelectorAll('.view-section').forEach(sec => {
+                sec.classList.toggle('hidden', sec.id !== `view-${state.activeTab}`);
+            });
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.tab === state.activeTab);
+            });
+        }
+
+        // 3. Branch switcher lock for non-Admin roles (staff are locked to their assigned branch)
+        const branchSelect = document.getElementById('globalBranchSelect');
+        if (branchSelect) {
+            branchSelect.disabled = !cfg.canSwitchBranch;
+            branchSelect.title = cfg.canSwitchBranch
+                ? 'Switch active branch'
+                : `Branch locked to your assigned location (${state.activeStaff?.role || 'Staff'})`;
+        }
+
+        // 4. POS Quick Dish button & Pay/Settle button visibility
+        const quickDishBtn = document.getElementById('btnPosQuickDish');
+        if (quickDishBtn) {
+            quickDishBtn.classList.toggle('hidden', !cfg.canManageMenu);
+        }
+
+        const payBtn = document.getElementById('btnPosPayAndSettle');
+        const sendKitchenBtn = document.getElementById('btnPosSendToKitchen');
+        if (payBtn && sendKitchenBtn) {
+            if (!cfg.canSettlePayment) {
+                payBtn.classList.add('hidden');
+                sendKitchenBtn.classList.add('col-span-2');
+            } else {
+                payBtn.classList.remove('hidden');
+                sendKitchenBtn.classList.remove('col-span-2');
+            }
+        }
+
+        // 5. Add Floor Table button visibility
+        const addTableBtn = document.getElementById('btnAddFloorTable');
+        if (addTableBtn) {
+            addTableBtn.classList.toggle('hidden', !cfg.canAddTable);
+        }
+
+        // 6. Menu Studio Add Dish button visibility (Chefs can 86/restock but not create/delete dishes)
+        const menuAddBtn = document.getElementById('btnMenuStudioAddDish');
+        if (menuAddBtn) {
+            menuAddBtn.classList.toggle('hidden', !cfg.canManageMenu);
         }
     }
 
@@ -259,6 +399,11 @@ const LiterosApp = (() => {
     }
 
     function switchTab(tabName) {
+        const cfg = getCurrentRoleConfig();
+        if (!cfg.tabs.includes(tabName)) {
+            toast(`Access Denied: ${state.activeStaff?.role || 'Your role'} cannot access that module.`, 'error');
+            return;
+        }
         state.activeTab = tabName;
         document.querySelectorAll('.view-section').forEach(sec => {
             sec.classList.toggle('hidden', sec.id !== `view-${tabName}`);
@@ -272,12 +417,14 @@ const LiterosApp = (() => {
     }
 
     async function switchBranch(branchId) {
+        const cfg = getCurrentRoleConfig();
+        if (!cfg.canSwitchBranch) {
+            toast('Access Denied: Only Executive Admins can switch across branches.', 'error');
+            renderTopBar();
+            return;
+        }
         state.activeBranchId = Number(branchId);
         state.selectedTableId = '';
-        const branchStaff = state.staff.find(s => Number(s.branch_id) === state.activeBranchId);
-        if (branchStaff) {
-            state.activeStaff = branchStaff;
-        }
         await loadBootstrap(state.activeBranchId);
         const branch = getActiveBranch();
         toast(`Switched terminal to ${branch.name} (${branch.city})`, 'info');
@@ -940,7 +1087,15 @@ const LiterosApp = (() => {
     // 4. SALES LEDGER, ANALYTICS & THERMAL RECEIPTS
     // =========================================================================
     function renderSalesView() {
-        const validOrders = state.orders.filter(o => o.status !== 'Cancelled');
+        const cfg = getCurrentRoleConfig();
+        const myId = Number(state.activeStaff?.id || 0);
+
+        // Waiters only see their own orders & tips; Cashiers/Managers/Admins see branch orders
+        const scopedOrders = cfg.ownOrdersOnly
+            ? state.orders.filter(o => Number(o.staff_id) === myId)
+            : state.orders;
+
+        const validOrders = scopedOrders.filter(o => o.status !== 'Cancelled');
         const grossRev = validOrders.reduce((s, o) => s + Number(o.total_amount), 0);
         const totalTax = validOrders.reduce((s, o) => s + Number(o.tax_amount), 0);
         const totalTips = validOrders.reduce((s, o) => s + Number(o.tip_amount), 0);
@@ -977,7 +1132,7 @@ const LiterosApp = (() => {
         if (!tbody) return;
 
         const q = state.salesSearch.toLowerCase().trim();
-        const filtered = state.orders.filter(o => {
+        const filtered = scopedOrders.filter(o => {
             if (state.salesStatusFilter !== 'all' && o.status !== state.salesStatusFilter) return false;
             if (q && !o.order_number.toLowerCase().includes(q) && !o.customer_name.toLowerCase().includes(q) && !(o.staff_name || '').toLowerCase().includes(q)) {
                 return false;
@@ -1022,7 +1177,7 @@ const LiterosApp = (() => {
                                     title="Print / View Thermal Receipt">
                                 <i class="fa-solid fa-print mr-1"></i>Receipt
                             </button>
-                            ${o.payment_status === 'Unpaid' ? `
+                            ${(o.payment_status === 'Unpaid' && cfg.canSettlePayment) ? `
                                 <button onclick="LiterosApp.quickSettleOrder(${o.id})"
                                         class="px-2.5 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs">
                                     Pay
@@ -1127,6 +1282,7 @@ const LiterosApp = (() => {
     // 5. MENU & RECIPE STUDIO
     // =========================================================================
     function renderMenuStudioView() {
+        const cfg = getCurrentRoleConfig();
         const catSelect = document.getElementById('menuFormCategorySelect');
         if (catSelect) {
             catSelect.innerHTML = state.categories.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
@@ -1180,14 +1336,16 @@ const LiterosApp = (() => {
                         </button>
                     </td>
                     <td class="py-3 px-4 text-right">
-                        <button onclick="LiterosApp.editMenuItem(${item.id})"
-                                class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 mr-1">
-                            <i class="fa-solid fa-pen"></i>
-                        </button>
-                        <button onclick="LiterosApp.deleteMenuItem(${item.id})"
-                                class="px-2.5 py-1 rounded-lg bg-rose-950/60 hover:bg-rose-600 text-xs text-rose-300 hover:text-white">
-                            <i class="fa-solid fa-trash"></i>
-                        </button>
+                        ${cfg.canManageMenu ? `
+                            <button onclick="LiterosApp.editMenuItem(${item.id})"
+                                    class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 mr-1">
+                                <i class="fa-solid fa-pen"></i>
+                            </button>
+                            <button onclick="LiterosApp.deleteMenuItem(${item.id})"
+                                    class="px-2.5 py-1 rounded-lg bg-rose-950/60 hover:bg-rose-600 text-xs text-rose-300 hover:text-white">
+                                <i class="fa-solid fa-trash"></i>
+                            </button>
+                        ` : `<span class="text-[10px] text-slate-500 font-semibold">Stock/86 Only</span>`}
                     </td>
                 </tr>
             `;
@@ -1451,7 +1609,9 @@ const LiterosApp = (() => {
             Chef: 'bg-rose-500/20 text-rose-300 border-rose-500/40'
         };
 
-        listEl.innerHTML = state.staff.map(s => `
+        listEl.innerHTML = state.staff.map(s => {
+            const roleCfg = ROLE_PERMISSIONS[s.role] || ROLE_PERMISSIONS.Waiter;
+            return `
             <div onclick="LiterosApp.fillLoginDemoCredential('${escapeHtml(s.email || s.employee_code)}', '${escapeHtml(s.pin_code)}')"
                  class="p-3.5 rounded-2xl bg-slate-900/90 hover:bg-slate-800/90 border border-white/10 hover:border-amber-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer transition group">
                 <div class="flex items-center gap-3">
@@ -1470,6 +1630,9 @@ const LiterosApp = (() => {
                             <span class="font-mono-num text-slate-300">${escapeHtml(s.email || s.employee_code)}</span>
                             • ${escapeHtml(s.branch_code || s.branch_name || 'HQ')}
                         </div>
+                        <div class="text-[10px] text-amber-400/90 mt-0.5">
+                            <i class="fa-solid fa-shield-halved mr-1"></i>${escapeHtml(roleCfg.label)}
+                        </div>
                     </div>
                 </div>
 
@@ -1487,7 +1650,7 @@ const LiterosApp = (() => {
                     </button>
                 </div>
             </div>
-        `).join('');
+        `}).join('');
     }
 
     function fillLoginDemoCredential(identifier, pin) {
@@ -1534,6 +1697,16 @@ const LiterosApp = (() => {
             state.activeStaff = res.staff;
             try { localStorage.setItem('literos_auth_staff_id', String(res.staff.id)); } catch (_) {}
 
+            // Route operator to their role's primary default workspace tab
+            const roleCfg = getCurrentRoleConfig();
+            state.activeTab = roleCfg.defaultTab;
+            document.querySelectorAll('.view-section').forEach(sec => {
+                sec.classList.toggle('hidden', sec.id !== `view-${state.activeTab}`);
+            });
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.tab === state.activeTab);
+            });
+
             // If staff belongs to a specific branch, switch terminal to their branch
             if (res.staff.branch_id && Number(res.staff.branch_id) !== Number(state.activeBranchId)) {
                 state.activeBranchId = Number(res.staff.branch_id);
@@ -1544,7 +1717,7 @@ const LiterosApp = (() => {
 
             document.getElementById('loginPinInput').value = '';
             document.getElementById('loginScreenOverlay')?.classList.add('hidden');
-            toast(res.message, 'success');
+            toast(`${res.message} • Workspace: ${roleCfg.label}`, 'success');
         } catch (err) {
             toast(err.message, 'error');
         }

@@ -154,7 +154,7 @@ declare(strict_types=1);
                     <span class="hidden lg:inline px-1.5 py-0.5 text-[9px] font-mono-num font-bold rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">PRO</span>
                 </button>
 
-                <div class="pt-2 pb-1 px-3 hidden lg:block">
+                <div id="navManagementDivider" class="pt-2 pb-1 px-3 hidden lg:block">
                     <div class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Management</div>
                 </div>
 
@@ -224,7 +224,7 @@ declare(strict_types=1);
                                    class="w-full pl-9 pr-4 py-2.5 rounded-xl bg-slate-900/90 border border-white/10 focus:border-amber-500 text-xs text-white outline-none">
                         </div>
                         <div class="flex items-center gap-2">
-                            <button onclick="LiterosApp.openNewMenuModal()"
+                            <button id="btnPosQuickDish" onclick="LiterosApp.openNewMenuModal()"
                                     class="px-3.5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-white/10 text-xs font-semibold text-amber-300 flex items-center gap-1.5">
                                 <i class="fa-solid fa-plus"></i>Quick Dish
                             </button>
@@ -340,12 +340,12 @@ declare(strict_types=1);
                         </div>
 
                         <div class="grid grid-cols-2 gap-2 pt-2">
-                            <button onclick="LiterosApp.submitOrder('Unpaid')"
+                            <button id="btnPosSendToKitchen" onclick="LiterosApp.submitOrder('Unpaid')"
                                     class="py-3 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold text-xs border border-amber-500/30 flex items-center justify-center gap-1.5 transition">
                                 <i class="fa-solid fa-fire-burner"></i>
                                 Send to Kitchen
                             </button>
-                            <button onclick="LiterosApp.openCheckoutModal()"
+                            <button id="btnPosPayAndSettle" onclick="LiterosApp.openCheckoutModal()"
                                     class="py-3 px-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-extrabold text-xs shadow-lg shadow-amber-500/25 flex items-center justify-center gap-1.5 transition">
                                 <i class="fa-solid fa-credit-card"></i>
                                 Pay & Settle
@@ -407,7 +407,7 @@ declare(strict_types=1);
                         <span class="px-3 py-1.5 rounded-xl bg-indigo-500/15 border border-indigo-500/30 text-xs text-indigo-300">
                             Cleaning: <strong id="floorCountCleaning" class="font-mono-num">0</strong>
                         </span>
-                        <button onclick="LiterosApp.openModal('tableModal')"
+                        <button id="btnAddFloorTable" onclick="LiterosApp.openModal('tableModal')"
                                 class="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs">
                             <i class="fa-solid fa-plus mr-1"></i>Add Table
                         </button>
@@ -855,7 +855,7 @@ declare(strict_types=1);
                         </h2>
                         <p class="text-xs text-slate-400 mt-0.5">Manage dishes, gross profit (GP%) margins, modifiers, and live portion inventory</p>
                     </div>
-                    <button onclick="LiterosApp.openNewMenuModal()"
+                    <button id="btnMenuStudioAddDish" onclick="LiterosApp.openNewMenuModal()"
                             class="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-2">
                         <i class="fa-solid fa-plus"></i>Add New Dish
                     </button>
