@@ -18,6 +18,8 @@ const LiterosApp = (() => {
         staff: [],
         tables: [],
         orders: [],
+        expenditures: [],
+        expenditureSummary: {},
         shifts: [],
 
         // POS Filters & Cart
@@ -30,7 +32,7 @@ const LiterosApp = (() => {
         guestsCount: 2,
         discountPercent: 0,
         tipAmount: 0,
-        paymentMethod: 'Card',
+        paymentMethod: 'Cash',
         paymentStatus: 'Paid',
         orderNotes: '',
 
@@ -45,6 +47,14 @@ const LiterosApp = (() => {
         salesStatusFilter: 'all',
         salesSearch: '',
 
+        // Expenditures Filter
+        expCategoryFilter: 'all',
+        expMethodFilter: 'all',
+        expSearch: '',
+
+        // Login Credentials Branch Filter
+        loginBranchFilter: 'all',
+
         // Active modal item for modifiers
         pendingMenuItem: null,
         selectedModifiers: []
@@ -55,40 +65,43 @@ const LiterosApp = (() => {
     // =========================================================================
     const ROLE_PERMISSIONS = {
         Admin: {
-            label: 'Executive Admin (Full Access)',
-            tabs: ['pos', 'kds', 'tables', 'sales', 'reports', 'menu', 'staff', 'branches', 'company'],
+            label: 'Executive Owner / Admin (Full Access)',
+            tabs: ['pos', 'kds', 'tables', 'sales', 'expenditures', 'reports', 'menu', 'staff', 'branches', 'company'],
             defaultTab: 'pos',
             canSettlePayment: true,
             canApplyDiscount: true,
             canManageMenu: true,
             canAddTable: true,
             canSwitchBranch: true,
+            canDeleteExpenditure: true,
             ownOrdersOnly: false
         },
         Manager: {
-            label: 'Branch Manager (Branch Operations & BI)',
-            tabs: ['pos', 'kds', 'tables', 'sales', 'reports', 'menu', 'staff'],
+            label: 'Branch Manager (Branch Operations, Expenses & BI)',
+            tabs: ['pos', 'kds', 'tables', 'sales', 'expenditures', 'reports', 'menu', 'staff'],
             defaultTab: 'pos',
             canSettlePayment: true,
             canApplyDiscount: true,
             canManageMenu: true,
             canAddTable: true,
             canSwitchBranch: false,
+            canDeleteExpenditure: true,
             ownOrdersOnly: false
         },
         Cashier: {
-            label: 'POS Cashier (Register, Billing & Tables)',
-            tabs: ['pos', 'tables', 'sales'],
+            label: 'POS Cashier (Register, MoMo/Cash Billing & Expenses)',
+            tabs: ['pos', 'tables', 'sales', 'expenditures'],
             defaultTab: 'pos',
             canSettlePayment: true,
             canApplyDiscount: true,
             canManageMenu: false,
             canAddTable: false,
             canSwitchBranch: false,
+            canDeleteExpenditure: false,
             ownOrdersOnly: false
         },
         Waiter: {
-            label: 'Floor Waiter (Tables, Order Taking & Own Checks)',
+            label: 'Waitress / Server (Tables, Order Taking & Own Checks)',
             tabs: ['pos', 'tables', 'kds', 'sales'],
             defaultTab: 'tables',
             canSettlePayment: false,
@@ -96,10 +109,11 @@ const LiterosApp = (() => {
             canManageMenu: false,
             canAddTable: false,
             canSwitchBranch: false,
+            canDeleteExpenditure: false,
             ownOrdersOnly: true
         },
         Chef: {
-            label: 'Head Chef (Kitchen Display & 86/Stock Control)',
+            label: 'Kitchen Chef (KDS Tickets & 86/Stock Control)',
             tabs: ['kds', 'menu'],
             defaultTab: 'kds',
             canSettlePayment: false,
@@ -107,6 +121,7 @@ const LiterosApp = (() => {
             canManageMenu: false,
             canAddTable: false,
             canSwitchBranch: false,
+            canDeleteExpenditure: false,
             ownOrdersOnly: false
         }
     };
@@ -143,9 +158,9 @@ const LiterosApp = (() => {
     }
 
     function money(val) {
-        const sym = state.company?.currency_symbol || '$';
+        const sym = state.company?.currency_symbol || 'GHS ';
         const num = Number(val || 0);
-        return `${sym}${num.toFixed(2)}`;
+        return `${sym}${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     }
 
     function escapeHtml(str) {
@@ -252,6 +267,8 @@ const LiterosApp = (() => {
             state.staff = data.staff || [];
             state.tables = data.tables || [];
             state.orders = data.orders || [];
+            state.expenditures = data.expenditures || [];
+            state.expenditureSummary = data.expenditure_summary || {};
             state.shifts = data.shifts || [];
 
             if (!state.activeStaff && state.staff.length > 0) {
@@ -273,6 +290,7 @@ const LiterosApp = (() => {
         renderKdsView();
         renderTablesView();
         renderSalesView();
+        renderExpendituresView();
         renderReportsFilterOptions();
         renderMenuStudioView();
         renderStaffView();
@@ -612,10 +630,10 @@ const LiterosApp = (() => {
         const allMods = [...state.selectedModifiers];
         if (customNote) allMods.push(customNote);
 
-        // Parse any (+$X) upcharge inside selected modifiers
+        // Parse any (+$X) or (+GHS X) or (+¢X) upcharge inside selected modifiers
         let extraPrice = 0;
         allMods.forEach(m => {
-            const match = m.match(/\+\$(\d+(?:\.\d+)?)/);
+            const match = m.match(/\+(?:\$|GHS\s*|¢\s*)(\d+(?:\.\d+)?)/i);
             if (match) extraPrice += parseFloat(match[1]);
         });
 
@@ -1109,18 +1127,19 @@ const LiterosApp = (() => {
         // Payment Method Breakdown Bars
         const breakdownEl = document.getElementById('paymentMethodBreakdown');
         if (breakdownEl) {
-            const methods = ['Card', 'Cash', 'QR Pay', 'Split'];
+            const methods = ['Cash', 'MoMo', 'QR Pay', 'Card', 'Split'];
             breakdownEl.innerHTML = methods.map(m => {
                 const sum = validOrders.filter(o => o.payment_method === m).reduce((acc, o) => acc + Number(o.total_amount), 0);
                 const pct = grossRev > 0 ? Math.round((sum / grossRev) * 100) : 0;
+                const barColor = m === 'MoMo' ? 'bg-yellow-400' : (m === 'Cash' ? 'bg-emerald-400' : 'bg-amber-500');
                 return `
                     <div>
                         <div class="flex justify-between text-xs mb-1">
-                            <span class="font-medium text-slate-300">${m}</span>
+                            <span class="font-medium text-slate-300">${m === 'MoMo' ? 'MoMo (Mobile Money)' : m}</span>
                             <span class="font-mono-num text-slate-400">${money(sum)} (${pct}%)</span>
                         </div>
                         <div class="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
-                            <div class="h-full bg-amber-500 rounded-full" style="width:${pct}%"></div>
+                            <div class="h-full ${barColor} rounded-full" style="width:${pct}%"></div>
                         </div>
                     </div>
                 `;
@@ -1192,7 +1211,7 @@ const LiterosApp = (() => {
 
     async function quickSettleOrder(orderId) {
         try {
-            const res = await api('settle_order_payment', { order_id: orderId, payment_method: 'Card', tip_amount: 10 });
+            const res = await api('settle_order_payment', { order_id: orderId, payment_method: 'MoMo', tip_amount: 20 });
             await loadBootstrap(state.activeBranchId);
             toast(res.message, 'success');
         } catch (err) {
@@ -1200,8 +1219,192 @@ const LiterosApp = (() => {
         }
     }
 
+    // =========================================================================
+    // 4A-EXP. OPERATING EXPENDITURES MODULE
+    // =========================================================================
+    function renderExpendituresView() {
+        const cfg = getCurrentRoleConfig();
+        const branchSel = document.getElementById('expFormBranchSelect');
+        if (branchSel) {
+            branchSel.innerHTML = state.branches.map(b =>
+                `<option value="${b.id}" ${Number(b.id) === Number(state.activeBranchId) ? 'selected' : ''}>${escapeHtml(b.code)} — ${escapeHtml(b.name)}</option>`
+            ).join('');
+            branchSel.disabled = !cfg.canSwitchBranch;
+        }
+
+        const sum = state.expenditureSummary || {};
+        const elTot = document.getElementById('expMetricTotalAmount');
+        const elCnt = document.getElementById('expMetricTotalCount');
+        const elYtd = document.getElementById('expMetricYtdAmount');
+        const elMomo = document.getElementById('expMetricMomoAmount');
+        const elCash = document.getElementById('expMetricCashAmount');
+
+        if (elTot) elTot.textContent = money(sum.total_amount || 0);
+        if (elCnt) elCnt.textContent = `${sum.total_count || 0} recorded expenditure vouchers`;
+        if (elYtd) elYtd.textContent = money(sum.ytd_2026_amount || 0);
+        if (elMomo) elMomo.textContent = money(sum.momo_amount || 0);
+        if (elCash) elCash.textContent = money(sum.cash_amount || 0);
+
+        const tbody = document.getElementById('expendituresTableBody');
+        if (!tbody) return;
+
+        const q = (state.expSearch || '').toLowerCase().trim();
+        const filtered = (state.expenditures || []).filter(e => {
+            if (state.expCategoryFilter !== 'all' && e.category !== state.expCategoryFilter) return false;
+            if (state.expMethodFilter !== 'all' && e.payment_method !== state.expMethodFilter) return false;
+            if (q && !(e.reference_no || '').toLowerCase().includes(q)
+                && !(e.title || '').toLowerCase().includes(q)
+                && !(e.vendor_name || '').toLowerCase().includes(q)
+                && !(e.category || '').toLowerCase().includes(q)) {
+                return false;
+            }
+            return true;
+        });
+
+        if (filtered.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="9" class="py-12 text-center text-xs text-slate-500">No expenditure vouchers match your filter criteria.</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = filtered.map(e => {
+            const methodBadge = e.payment_method === 'MoMo'
+                ? 'bg-yellow-500/15 text-yellow-300 border-yellow-500/30'
+                : (e.payment_method === 'Cash'
+                    ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                    : 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30');
+
+            return `
+                <tr class="border-b border-white/5 hover:bg-white/[0.02] transition">
+                    <td class="py-3.5 px-4 font-mono-num text-xs font-bold text-rose-400">${escapeHtml(e.reference_no)}</td>
+                    <td class="py-3.5 px-4 font-mono-num text-xs text-slate-300">${escapeHtml(e.expense_date)}</td>
+                    <td class="py-3.5 px-4 text-xs text-slate-300">${escapeHtml(e.branch_code || e.branch_name || '')}</td>
+                    <td class="py-3.5 px-4">
+                        <span class="px-2.5 py-0.5 rounded-md bg-slate-900 border border-white/10 text-[11px] font-semibold text-amber-300">
+                            ${escapeHtml(e.category)}
+                        </span>
+                    </td>
+                    <td class="py-3.5 px-4">
+                        <div class="text-xs font-semibold text-white">${escapeHtml(e.title)}</div>
+                        <div class="text-[11px] text-slate-400">${escapeHtml(e.vendor_name || 'Direct Vendor')} ${e.notes ? `• ${escapeHtml(e.notes)}` : ''}</div>
+                    </td>
+                    <td class="py-3.5 px-4 text-xs text-slate-300">${escapeHtml(e.staff_name || 'Manager')}</td>
+                    <td class="py-3.5 px-4">
+                        <span class="px-2 py-0.5 rounded-md text-[11px] font-semibold border ${methodBadge}">
+                            ${escapeHtml(e.payment_method)}
+                        </span>
+                    </td>
+                    <td class="py-3.5 px-4 font-mono-num text-xs font-extrabold text-rose-400 text-right">-${money(e.amount)}</td>
+                    <td class="py-3.5 px-4 text-right">
+                        <div class="inline-flex items-center gap-1.5">
+                            <button onclick="LiterosApp.editExpenditure(${e.id})"
+                                    class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-200">
+                                <i class="fa-solid fa-pen"></i>
+                            </button>
+                            ${cfg.canDeleteExpenditure ? `
+                                <button onclick="LiterosApp.deleteExpenditure(${e.id})"
+                                        class="px-2.5 py-1 rounded-lg bg-rose-950/60 hover:bg-rose-600 text-xs text-rose-300 hover:text-white">
+                                    <i class="fa-solid fa-trash"></i>
+                                </button>
+                            ` : ''}
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    function openNewExpenditureModal() {
+        const form = document.getElementById('expenditureForm');
+        if (!form) return;
+        form.reset();
+        form.id.value = '';
+        form.branch_id.value = state.activeBranchId;
+        form.expense_date.value = new Date().toISOString().slice(0, 10);
+        form.payment_method.value = 'MoMo';
+        document.getElementById('expenditureModalTitle').innerHTML = `<i class="fa-solid fa-wallet text-rose-400 mr-1.5"></i>Record Branch Expenditure`;
+        document.getElementById('expenditureModal').classList.remove('hidden');
+    }
+
+    function editExpenditure(id) {
+        const exp = (state.expenditures || []).find(e => Number(e.id) === Number(id));
+        if (!exp) return;
+        const form = document.getElementById('expenditureForm');
+        if (!form) return;
+        form.id.value = exp.id;
+        form.branch_id.value = exp.branch_id;
+        form.category.value = exp.category;
+        form.title.value = exp.title;
+        form.amount.value = exp.amount;
+        form.payment_method.value = exp.payment_method || 'MoMo';
+        form.expense_date.value = exp.expense_date;
+        form.vendor_name.value = exp.vendor_name || '';
+        form.notes.value = exp.notes || '';
+        document.getElementById('expenditureModalTitle').innerHTML = `<i class="fa-solid fa-pen text-amber-400 mr-1.5"></i>Edit Expenditure: ${escapeHtml(exp.reference_no)}`;
+        document.getElementById('expenditureModal').classList.remove('hidden');
+    }
+
+    async function submitExpenditureForm(e) {
+        e.preventDefault();
+        const form = e.target;
+        const payload = {
+            id: form.id.value ? Number(form.id.value) : 0,
+            branch_id: Number(form.branch_id.value || state.activeBranchId),
+            category: form.category.value,
+            title: form.title.value,
+            amount: parseFloat(form.amount.value),
+            payment_method: form.payment_method.value,
+            expense_date: form.expense_date.value,
+            vendor_name: form.vendor_name.value,
+            notes: form.notes.value
+        };
+        try {
+            const res = await api('save_expenditure', payload);
+            closeModal('expenditureModal');
+            await loadBootstrap(state.activeBranchId);
+            toast(res.message, 'success');
+        } catch (err) {
+            toast(err.message, 'error');
+        }
+    }
+
+    async function deleteExpenditure(id) {
+        try {
+            const res = await api('delete_expenditure', { id });
+            await loadBootstrap(state.activeBranchId);
+            toast(res.message, 'info');
+        } catch (err) {
+            toast(err.message, 'error');
+        }
+    }
+
+    function exportExpendituresCsv() {
+        const headers = ['Voucher Ref', 'Expense Date', 'Branch', 'Category', 'Title', 'Vendor', 'Payment Method', 'Amount', 'Approved By', 'Notes'];
+        const rows = (state.expenditures || []).map(e => [
+            e.reference_no,
+            e.expense_date,
+            `"${(e.branch_name || '').replace(/"/g, '""')}"`,
+            `"${(e.category || '').replace(/"/g, '""')}"`,
+            `"${(e.title || '').replace(/"/g, '""')}"`,
+            `"${(e.vendor_name || '').replace(/"/g, '""')}"`,
+            e.payment_method,
+            e.amount,
+            `"${(e.staff_name || '').replace(/"/g, '""')}"`,
+            `"${(e.notes || '').replace(/"/g, '""')}"`
+        ]);
+        const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `shakes_and_dessert_expenditures_${new Date().toISOString().slice(0, 10)}.csv`;
+        link.click();
+        toast('Expenditures ledger exported to CSV');
+    }
+
     function viewReceipt(orderId) {
-        const ord = state.orders.find(o => Number(o.id) === Number(orderId));
+        let ord = state.orders.find(o => Number(o.id) === Number(orderId));
+        if (!ord && latestReportData && Array.isArray(latestReportData.transactions)) {
+            ord = latestReportData.transactions.find(o => Number(o.id) === Number(orderId));
+        }
         if (!ord) return;
         const comp = state.company;
         const branch = state.branches.find(b => Number(b.id) === Number(ord.branch_id)) || getActiveBranch();
@@ -1591,12 +1794,25 @@ const LiterosApp = (() => {
     // =========================================================================
     // 6B. FULL LOGIN SCREEN, SEEDED CREDENTIALS DIRECTORY & LOGOUT
     // =========================================================================
+    function setLoginBranchFilter(bFilter) {
+        state.loginBranchFilter = String(bFilter);
+        document.querySelectorAll('.login-bfilter-btn').forEach(btn => {
+            const active = String(btn.dataset.bfilter) === state.loginBranchFilter;
+            btn.className = `login-bfilter-btn px-2.5 py-1 rounded-lg text-[11px] transition ${
+                active
+                    ? 'bg-amber-500 text-slate-950 font-extrabold'
+                    : 'bg-slate-900 border border-white/10 text-slate-300 font-semibold hover:text-white'
+            }`;
+        });
+        renderLoginCredentialsScreen();
+    }
+
     function renderLoginCredentialsScreen() {
         const comp = state.company || {};
         const logoEl = document.getElementById('loginBrandLogo');
         const nameEl = document.getElementById('loginBrandName');
-        if (logoEl) logoEl.textContent = comp.logo_text || 'S&S';
-        if (nameEl) nameEl.textContent = comp.name || 'Saffron & Slate Hospitality';
+        if (logoEl) logoEl.textContent = comp.logo_text || 'SD';
+        if (nameEl) nameEl.textContent = comp.name || 'Shakes and Dessert';
 
         const listEl = document.getElementById('loginDemoCredentialsList');
         if (!listEl) return;
@@ -1609,13 +1825,19 @@ const LiterosApp = (() => {
             Chef: 'bg-rose-500/20 text-rose-300 border-rose-500/40'
         };
 
-        listEl.innerHTML = state.staff.map(s => {
+        const filteredStaff = state.staff.filter(s => {
+            if (state.loginBranchFilter === 'all') return true;
+            if (s.role === 'Admin') return true; // Always show Owner Hajia Rabi Adam at top
+            return String(s.branch_id) === String(state.loginBranchFilter);
+        });
+
+        listEl.innerHTML = filteredStaff.map(s => {
             const roleCfg = ROLE_PERMISSIONS[s.role] || ROLE_PERMISSIONS.Waiter;
             return `
             <div onclick="LiterosApp.fillLoginDemoCredential('${escapeHtml(s.email || s.employee_code)}', '${escapeHtml(s.pin_code)}')"
-                 class="p-3.5 rounded-2xl bg-slate-900/90 hover:bg-slate-800/90 border border-white/10 hover:border-amber-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer transition group">
+                 class="p-3 rounded-2xl bg-slate-900/90 hover:bg-slate-800/90 border border-white/10 hover:border-amber-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 cursor-pointer transition group">
                 <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-xl flex items-center justify-center text-xs font-extrabold text-slate-950 shrink-0 shadow"
+                    <div class="w-9 h-9 rounded-xl flex items-center justify-center text-xs font-extrabold text-slate-950 shrink-0 shadow"
                          style="background:${escapeHtml(s.avatar_color || '#f59e0b')}">
                         ${escapeHtml(s.full_name.slice(0, 2).toUpperCase())}
                     </div>
@@ -1623,12 +1845,12 @@ const LiterosApp = (() => {
                         <div class="flex items-center gap-2">
                             <span class="text-xs font-bold text-white group-hover:text-amber-300 transition">${escapeHtml(s.full_name)}</span>
                             <span class="px-2 py-0.5 rounded-md text-[10px] font-bold border ${roleBadges[s.role] || 'bg-slate-800 text-slate-300'}">
-                                ${escapeHtml(s.role)}
+                                ${escapeHtml(s.role === 'Waiter' ? 'Waitress' : s.role)}
                             </span>
                         </div>
                         <div class="text-[11px] text-slate-400 mt-0.5">
                             <span class="font-mono-num text-slate-300">${escapeHtml(s.email || s.employee_code)}</span>
-                            • ${escapeHtml(s.branch_code || s.branch_name || 'HQ')}
+                            • ${escapeHtml(s.branch_name || 'Kumasi HQ')}
                         </div>
                         <div class="text-[10px] text-amber-400/90 mt-0.5">
                             <i class="fa-solid fa-shield-halved mr-1"></i>${escapeHtml(roleCfg.label)}
@@ -1645,7 +1867,7 @@ const LiterosApp = (() => {
                     </div>
                     <button type="button"
                             onclick="event.stopPropagation(); LiterosApp.quickLoginAs('${escapeHtml(s.email || s.employee_code)}', '${escapeHtml(s.pin_code)}')"
-                            class="px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs transition shrink-0">
+                            class="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs transition shrink-0">
                         Quick Sign-In
                     </button>
                 </div>
@@ -1854,12 +2076,13 @@ const LiterosApp = (() => {
         if (!form || !state.company) return;
         const c = state.company;
         form.name.value = c.name || '';
+        if (form.owner_name) form.owner_name.value = c.owner_name || 'Hajia Rabi Adam';
         form.tagline.value = c.tagline || '';
-        form.logo_text.value = c.logo_text || 'LR';
-        form.currency_symbol.value = c.currency_symbol || '$';
-        form.currency_code.value = c.currency_code || 'USD';
-        form.tax_rate.value = c.tax_rate ?? 8.25;
-        form.service_charge_rate.value = c.service_charge_rate ?? 5.0;
+        form.logo_text.value = c.logo_text || 'SD';
+        form.currency_symbol.value = c.currency_symbol || 'GHS ';
+        form.currency_code.value = c.currency_code || 'GHS';
+        form.tax_rate.value = c.tax_rate ?? 6.0;
+        form.service_charge_rate.value = c.service_charge_rate ?? 2.5;
         form.email.value = c.email || '';
         form.phone.value = c.phone || '';
         form.address.value = c.address || '';
@@ -1871,6 +2094,7 @@ const LiterosApp = (() => {
         const form = e.target;
         const payload = {
             name: form.name.value,
+            owner_name: form.owner_name ? form.owner_name.value : 'Hajia Rabi Adam',
             tagline: form.tagline.value,
             logo_text: form.logo_text.value,
             currency_symbol: form.currency_symbol.value,
@@ -1950,6 +2174,15 @@ const LiterosApp = (() => {
             const past = new Date(now.getTime() - 30 * 86400000);
             fromEl.value = fmt(past);
             toEl.value = fmt(now);
+        } else if (preset === '2024') {
+            fromEl.value = '2024-01-01';
+            toEl.value = '2024-12-31';
+        } else if (preset === '2025') {
+            fromEl.value = '2025-01-01';
+            toEl.value = '2025-12-31';
+        } else if (preset === '2026') {
+            fromEl.value = '2026-01-01';
+            toEl.value = fmt(now);
         } else {
             fromEl.value = '';
             toEl.value = '';
@@ -1996,22 +2229,22 @@ const LiterosApp = (() => {
     function renderReportKpis(k) {
         if (!k) return;
         document.getElementById('repKpiGrossRevenue').textContent = money(k.gross_revenue);
-        document.getElementById('repKpiPaidSplit').textContent = `Paid: ${money(k.paid_amount)} • Unpaid: ${money(k.unpaid_amount)}`;
+        document.getElementById('repKpiPaidSplit').textContent = `Daily Avg: ${money(k.avg_daily_revenue || 0)} (${k.active_days_count || 1}d)`;
 
         document.getElementById('repKpiNetSales').textContent = money(k.net_subtotal);
-        document.getElementById('repKpiDiscounts').textContent = `Discounts: -${money(k.total_discounts)}`;
+        document.getElementById('repKpiDiscounts').textContent = `Tax+Svc: ${money(k.total_tax + k.total_service_charge)} • Tips: ${money(k.total_tips)}`;
 
         document.getElementById('repKpiGrossProfit').textContent = money(k.gross_profit);
         document.getElementById('repKpiMarginPct').textContent = `COGS: ${money(k.total_cogs)} (${k.gross_margin_pct}% Margin)`;
 
-        document.getElementById('repKpiTaxService').textContent = money(k.total_tax + k.total_service_charge);
-        document.getElementById('repKpiTaxBreakdown').textContent = `Tax: ${money(k.total_tax)} • Svc: ${money(k.total_service_charge)}`;
+        document.getElementById('repKpiTaxService').textContent = `-${money(k.total_expenditures || 0)}`;
+        document.getElementById('repKpiTaxBreakdown').textContent = `${k.expenditures_count || 0} expense vouchers recorded`;
 
-        document.getElementById('repKpiTips').textContent = money(k.total_tips);
-        document.getElementById('repKpiGuestsCount').textContent = `${k.total_guests} Guests Served`;
+        document.getElementById('repKpiTips').textContent = money(k.net_operating_profit ?? k.gross_profit);
+        document.getElementById('repKpiGuestsCount').textContent = `${k.net_operating_margin_pct ?? k.gross_margin_pct}% Net Operating Margin`;
 
-        document.getElementById('repKpiOrdersCount').textContent = `${k.valid_orders} (${k.cancelled_orders} void)`;
-        document.getElementById('repKpiAvgCheck').textContent = `Avg Ticket: ${money(k.avg_order_value)}`;
+        document.getElementById('repKpiOrdersCount').textContent = `${k.valid_orders.toLocaleString()} orders`;
+        document.getElementById('repKpiAvgCheck').textContent = `${k.total_guests.toLocaleString()} guests • Avg: ${money(k.avg_order_value)}`;
     }
 
     function renderReportCharts(data) {
@@ -2020,14 +2253,14 @@ const LiterosApp = (() => {
         Chart.defaults.color = '#94a3b8';
         Chart.defaults.font.family = '"Plus Jakarta Sans", sans-serif';
 
-        // 1. Daily Revenue, Net Sales & Profit Trend Chart
+        // 1. Daily/Monthly Revenue, Gross Profit & Expenditures Trend Chart
         const dailyCtx = document.getElementById('repDailyTrendChart')?.getContext('2d');
         if (dailyCtx) {
             if (reportCharts.dailyTrend) reportCharts.dailyTrend.destroy();
             const labels = (data.daily_trend || []).map(d => d.date);
             const revData = (data.daily_trend || []).map(d => d.gross_revenue);
             const profitData = (data.daily_trend || []).map(d => d.gross_profit);
-            const cogsData = (data.daily_trend || []).map(d => d.cogs);
+            const expData = (data.daily_trend || []).map(d => d.expenditures || 0);
 
             reportCharts.dailyTrend = new Chart(dailyCtx, {
                 type: 'bar',
@@ -2037,22 +2270,22 @@ const LiterosApp = (() => {
                         {
                             label: 'Gross Revenue',
                             data: revData.length ? revData : [0],
-                            backgroundColor: 'rgba(245, 158, 11, 0.75)',
+                            backgroundColor: 'rgba(245, 158, 11, 0.78)',
                             borderColor: '#f59e0b',
                             borderWidth: 1,
                             borderRadius: 6
                         },
                         {
-                            label: 'Gross Profit',
+                            label: 'Gross Profit (After COGS)',
                             data: profitData.length ? profitData : [0],
-                            backgroundColor: 'rgba(16, 185, 129, 0.75)',
+                            backgroundColor: 'rgba(16, 185, 129, 0.78)',
                             borderColor: '#10b981',
                             borderWidth: 1,
                             borderRadius: 6
                         },
                         {
-                            label: 'Food Cost (COGS)',
-                            data: cogsData.length ? cogsData : [0],
+                            label: 'Operating Expenditures',
+                            data: expData.length ? expData : [0],
                             type: 'line',
                             borderColor: '#f43f5e',
                             backgroundColor: 'rgba(244, 63, 94, 0.2)',
@@ -2075,18 +2308,18 @@ const LiterosApp = (() => {
             });
         }
 
-        // 2. Payment Method Doughnut Chart
+        // 2. Payment Method Doughnut Chart (Cash 60%, MoMo 35%, QR Pay 5%, etc.)
         const payCtx = document.getElementById('repPaymentChart')?.getContext('2d');
         if (payCtx) {
             if (reportCharts.paymentMix) reportCharts.paymentMix.destroy();
-            const pList = data.payment_breakdown || [];
+            const pList = (data.payment_breakdown || []).filter(p => p.count > 0 || ['Cash', 'MoMo', 'QR Pay'].includes(p.method));
             reportCharts.paymentMix = new Chart(payCtx, {
                 type: 'doughnut',
                 data: {
                     labels: pList.map(p => `${p.method} (${p.count})`),
                     datasets: [{
                         data: pList.map(p => p.amount),
-                        backgroundColor: ['#f59e0b', '#10b981', '#06b6d4', '#8b5cf6'],
+                        backgroundColor: ['#10b981', '#facc15', '#06b6d4', '#f59e0b', '#8b5cf6'],
                         borderColor: '#090b10',
                         borderWidth: 2
                     }]
@@ -2223,9 +2456,12 @@ const LiterosApp = (() => {
         const txFoot = document.getElementById('repTransactionsTableFoot');
         const badge = document.getElementById('repTransactionsCountBadge');
         const txs = data.transactions || [];
+        const totalMatchingCount = data.transactions_total_count ?? txs.length;
 
         if (badge) {
-            badge.textContent = `${txs.length} matching transaction${txs.length === 1 ? '' : 's'}`;
+            badge.textContent = totalMatchingCount > txs.length
+                ? `Showing latest ${txs.length} of ${totalMatchingCount.toLocaleString()} matching transactions`
+                : `${totalMatchingCount.toLocaleString()} matching transaction${totalMatchingCount === 1 ? '' : 's'}`;
         }
 
         if (txBody) {
@@ -2373,7 +2609,7 @@ const LiterosApp = (() => {
                 document.getElementById('posSearchInput')?.focus();
             }
             if (e.key === 'Escape') {
-                ['modifierModal', 'checkoutModal', 'receiptModal', 'menuItemModal', 'staffModal', 'branchModal', 'tableModal', 'pinModal']
+                ['modifierModal', 'checkoutModal', 'receiptModal', 'menuItemModal', 'staffModal', 'branchModal', 'tableModal', 'pinModal', 'expenditureModal']
                     .forEach(id => closeModal(id));
             }
         });
@@ -2406,6 +2642,14 @@ const LiterosApp = (() => {
         quickSettleOrder,
         viewReceipt,
         exportSalesCsv,
+        openNewExpenditureModal,
+        editExpenditure,
+        submitExpenditureForm,
+        deleteExpenditure,
+        exportExpendituresCsv,
+        setExpenditureSearch: (q) => { state.expSearch = q; renderExpendituresView(); },
+        setExpenditureCategoryFilter: (c) => { state.expCategoryFilter = c; renderExpendituresView(); },
+        setExpenditureMethodFilter: (m) => { state.expMethodFilter = m; renderExpendituresView(); },
         openNewMenuModal,
         editMenuItem,
         submitMenuItem,
@@ -2417,6 +2661,7 @@ const LiterosApp = (() => {
         editStaffMember,
         submitStaffForm,
         submitPinSwitch,
+        setLoginBranchFilter,
         fillLoginDemoCredential,
         appendLoginPin,
         clearLoginPin,

@@ -157,6 +157,40 @@ try {
                 unset($ord);
             }
 
+            // Recent expenditures (for active branch or all if requested)
+            $expStmt = $pdo->prepare("
+                SELECT e.*, b.name AS branch_name, b.code AS branch_code,
+                       s.full_name AS staff_name, s.role AS staff_role
+                FROM expenditures e
+                LEFT JOIN branches b ON b.id = e.branch_id
+                LEFT JOIN staff s ON s.id = e.staff_id
+                WHERE (? = 0 OR e.branch_id = ?)
+                ORDER BY e.expense_date DESC, e.id DESC
+                LIMIT 150
+            ");
+            $expStmt->execute([$branchId, $branchId]);
+            $expenditures = $expStmt->fetchAll();
+
+            // Expenditure summary for current branch / company
+            $expSummaryStmt = $pdo->prepare("
+                SELECT
+                    COUNT(*) AS total_count,
+                    COALESCE(SUM(amount), 0) AS total_amount,
+                    COALESCE(SUM(CASE WHEN payment_method = 'MoMo' THEN amount ELSE 0 END), 0) AS momo_amount,
+                    COALESCE(SUM(CASE WHEN payment_method = 'Cash' THEN amount ELSE 0 END), 0) AS cash_amount,
+                    COALESCE(SUM(CASE WHEN expense_date >= '2026-01-01' THEN amount ELSE 0 END), 0) AS ytd_2026_amount
+                FROM expenditures
+                WHERE (? = 0 OR branch_id = ?)
+            ");
+            $expSummaryStmt->execute([$branchId, $branchId]);
+            $expenditureSummary = $expSummaryStmt->fetch() ?: [
+                'total_count' => 0,
+                'total_amount' => 0,
+                'momo_amount' => 0,
+                'cash_amount' => 0,
+                'ytd_2026_amount' => 0,
+            ];
+
             // Shifts
             $shiftsStmt = $pdo->prepare("
                 SELECT sh.*, s.full_name AS staff_name, b.name AS branch_name
@@ -174,6 +208,7 @@ try {
                 SELECT b.id, b.name, b.code,
                     (SELECT COUNT(*) FROM orders o WHERE o.branch_id = b.id AND o.status != 'Cancelled') AS order_count,
                     (SELECT COALESCE(SUM(o.total_amount), 0) FROM orders o WHERE o.branch_id = b.id AND o.status != 'Cancelled') AS revenue,
+                    (SELECT COALESCE(SUM(e.amount), 0) FROM expenditures e WHERE e.branch_id = b.id) AS total_expenditures,
                     (SELECT COUNT(*) FROM staff s WHERE s.branch_id = b.id AND s.is_active = 1) AS active_staff,
                     (SELECT COUNT(*) FROM restaurant_tables rt WHERE rt.branch_id = b.id) AS total_tables,
                     (SELECT COUNT(*) FROM restaurant_tables rt WHERE rt.branch_id = b.id AND rt.status = 'Occupied') AS occupied_tables
@@ -192,6 +227,8 @@ try {
                 'staff' => $staff,
                 'tables' => $tables,
                 'orders' => $orders,
+                'expenditures' => $expenditures,
+                'expenditure_summary' => $expenditureSummary,
                 'shifts' => $shifts,
             ]);
             break;
@@ -217,9 +254,9 @@ try {
             if ($actor['role'] === 'Waiter' && $paymentStatus === 'Paid') {
                 respond(['error' => 'Role Restriction: Waiters can send tickets to the Kitchen, while Cashiers or Managers settle payments.'], 403);
             }
-            $paymentMethod = in_array($payload['payment_method'] ?? '', ['Cash', 'Card', 'QR Pay', 'Split'], true)
+            $paymentMethod = in_array($payload['payment_method'] ?? '', ['Cash', 'MoMo', 'QR Pay', 'Card', 'Split'], true)
                 ? $payload['payment_method']
-                : 'Card';
+                : 'Cash';
             $discountAmount = max(0, (float)($payload['discount_amount'] ?? 0));
             $tipAmount = max(0, (float)($payload['tip_amount'] ?? 0));
             $notes = trim((string)($payload['notes'] ?? ''));
@@ -287,7 +324,7 @@ try {
 
             // Generate next order number
             $maxId = (int)$pdo->query("SELECT COALESCE(MAX(id), 1000) FROM orders")->fetchColumn();
-            $orderNumber = 'ORD-' . (1001 + $maxId);
+            $orderNumber = 'SD-' . (15000 + $maxId);
 
             $insOrder = $pdo->prepare("
                 INSERT INTO orders (
@@ -394,7 +431,9 @@ try {
         case 'settle_order_payment':
             requireRoles($pdo, $payload, ['Admin', 'Manager', 'Cashier']);
             $orderId = (int)($payload['order_id'] ?? 0);
-            $paymentMethod = (string)($payload['payment_method'] ?? 'Card');
+            $paymentMethod = in_array($payload['payment_method'] ?? '', ['Cash', 'MoMo', 'QR Pay', 'Card', 'Split'], true)
+                ? (string)$payload['payment_method']
+                : 'MoMo';
             $tipAmount = max(0, (float)($payload['tip_amount'] ?? 0));
 
             $ordStmt = $pdo->prepare("SELECT * FROM orders WHERE id = ?");
@@ -634,7 +673,7 @@ try {
             $staffMember = $stmt->fetch();
 
             if (!$staffMember) {
-                respond(['error' => 'Invalid POS PIN code. Try 1111 (Elena), 2222 (Julian), or 3333 (Amara).'], 401);
+                respond(['error' => 'Invalid POS PIN code. Try 1111 (Hajia Rabi Adam), 2101 (Alhaji Ibrahim), or 2102 (Efua Owusu).'], 401);
             }
             respond([
                 'message' => "Welcome back, {$staffMember['full_name']} ({$staffMember['role']})",
@@ -739,12 +778,13 @@ try {
         case 'save_company_profile':
             requireRoles($pdo, $payload, ['Admin']);
             $name = trim((string)($payload['name'] ?? ''));
+            $ownerName = trim((string)($payload['owner_name'] ?? 'Hajia Rabi Adam'));
             $tagline = trim((string)($payload['tagline'] ?? ''));
-            $logoText = trim((string)($payload['logo_text'] ?? 'LR'));
-            $currencySymbol = trim((string)($payload['currency_symbol'] ?? '$'));
-            $currencyCode = trim((string)($payload['currency_code'] ?? 'USD'));
-            $taxRate = max(0, (float)($payload['tax_rate'] ?? 8.25));
-            $serviceRate = max(0, (float)($payload['service_charge_rate'] ?? 5.00));
+            $logoText = trim((string)($payload['logo_text'] ?? 'SD'));
+            $currencySymbol = trim((string)($payload['currency_symbol'] ?? 'GHS '));
+            $currencyCode = trim((string)($payload['currency_code'] ?? 'GHS'));
+            $taxRate = max(0, (float)($payload['tax_rate'] ?? 6.00));
+            $serviceRate = max(0, (float)($payload['service_charge_rate'] ?? 2.50));
             $email = trim((string)($payload['email'] ?? ''));
             $phone = trim((string)($payload['phone'] ?? ''));
             $address = trim((string)($payload['address'] ?? ''));
@@ -756,16 +796,80 @@ try {
 
             $stmt = $pdo->prepare("
                 UPDATE company_profile
-                SET name = ?, tagline = ?, logo_text = ?, currency_symbol = ?, currency_code = ?,
+                SET name = ?, owner_name = ?, tagline = ?, logo_text = ?, currency_symbol = ?, currency_code = ?,
                     tax_rate = ?, service_charge_rate = ?, email = ?, phone = ?, address = ?, receipt_footer = ?
                 WHERE id = 1
             ");
             $stmt->execute([
-                $name, $tagline, $logoText, $currencySymbol, $currencyCode,
+                $name, $ownerName, $tagline, $logoText, $currencySymbol, $currencyCode,
                 $taxRate, $serviceRate, $email, $phone, $address, $receiptFooter
             ]);
 
             respond(['message' => 'Company HQ profile & tax settings saved']);
+            break;
+
+        // =====================================================================
+        // 7B. OPERATING EXPENDITURES MANAGEMENT
+        // =====================================================================
+        case 'save_expenditure':
+            $actor = requireRoles($pdo, $payload, ['Admin', 'Manager', 'Cashier']);
+            $id = (int)($payload['id'] ?? 0);
+            $branchId = (int)($payload['branch_id'] ?? $actor['branch_id'] ?? 1);
+            if ($actor['role'] !== 'Admin') {
+                $branchId = (int)$actor['branch_id'];
+            }
+            $staffId = (int)$actor['id'];
+            $category = trim((string)($payload['category'] ?? 'Ingredients & Dairy')) ?: 'Ingredients & Dairy';
+            $title = trim((string)($payload['title'] ?? ''));
+            $vendorName = trim((string)($payload['vendor_name'] ?? ''));
+            $paymentMethod = in_array($payload['payment_method'] ?? '', ['Cash', 'MoMo', 'QR Pay', 'Card', 'Bank Transfer'], true)
+                ? (string)$payload['payment_method']
+                : 'MoMo';
+            $amount = max(0, (float)($payload['amount'] ?? 0));
+            $expenseDate = trim((string)($payload['expense_date'] ?? date('Y-m-d'))) ?: date('Y-m-d');
+            $notes = trim((string)($payload['notes'] ?? ''));
+
+            if ($title === '' || $amount <= 0) {
+                respond(['error' => 'Expenditure title and a positive amount are required.'], 422);
+            }
+
+            if ($id > 0) {
+                $stmt = $pdo->prepare("
+                    UPDATE expenditures
+                    SET branch_id = ?, category = ?, title = ?, vendor_name = ?, payment_method = ?,
+                        amount = ?, expense_date = ?, notes = ?
+                    WHERE id = ?
+                ");
+                $stmt->execute([
+                    $branchId, $category, $title, $vendorName, $paymentMethod,
+                    $amount, $expenseDate, $notes, $id
+                ]);
+                respond(['message' => "Expenditure '{$title}' updated"]);
+            } else {
+                $maxExpId = (int)$pdo->query("SELECT COALESCE(MAX(id), 6000) FROM expenditures")->fetchColumn();
+                $refNo = 'EXP-' . (6001 + $maxExpId);
+                $stmt = $pdo->prepare("
+                    INSERT INTO expenditures (
+                        reference_no, branch_id, staff_id, category, title, vendor_name,
+                        payment_method, amount, expense_date, notes
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ");
+                $stmt->execute([
+                    $refNo, $branchId, $staffId, $category, $title, $vendorName,
+                    $paymentMethod, $amount, $expenseDate, $notes
+                ]);
+                respond(['message' => "Expenditure {$refNo} ({$title}) recorded"]);
+            }
+            break;
+
+        case 'delete_expenditure':
+            requireRoles($pdo, $payload, ['Admin', 'Manager']);
+            $id = (int)($payload['id'] ?? 0);
+            if ($id <= 0) {
+                respond(['error' => 'Invalid expenditure ID'], 422);
+            }
+            $pdo->prepare("DELETE FROM expenditures WHERE id = ?")->execute([$id]);
+            respond(['message' => 'Expenditure record deleted']);
             break;
 
         case 'reset_demo_data':
@@ -853,20 +957,19 @@ try {
             $stmt->execute($params);
             $orders = $stmt->fetchAll();
 
-            // Attach items & compute COGS per order
+            // Fetch order items using JOIN on orders so we never exceed SQLite's 999 placeholder limit
             $allOrderItems = [];
             if (!empty($orders)) {
-                $orderIds = array_column($orders, 'id');
-                $ph = implode(',', array_fill(0, count($orderIds), '?'));
                 $itemStmt = $pdo->prepare("
                     SELECT oi.*, m.category_id, c.name AS category_name, c.color AS category_color
                     FROM order_items oi
+                    INNER JOIN orders o ON o.id = oi.order_id
                     LEFT JOIN menu_items m ON m.id = oi.menu_item_id
                     LEFT JOIN categories c ON c.id = m.category_id
-                    WHERE oi.order_id IN ({$ph})
+                    WHERE {$whereSql}
                     ORDER BY oi.id ASC
                 ");
-                $itemStmt->execute($orderIds);
+                $itemStmt->execute($params);
                 $allOrderItems = $itemStmt->fetchAll();
             }
 
@@ -874,6 +977,59 @@ try {
             foreach ($allOrderItems as $oi) {
                 $itemsByOrder[$oi['order_id']][] = $oi;
             }
+
+            // Query matching expenditures for the same date / branch / payment filter
+            $expWhere = ['1=1'];
+            $expParams = [];
+            if ($fromDate !== '') {
+                $expWhere[] = 'e.expense_date >= ?';
+                $expParams[] = $fromDate;
+            }
+            if ($toDate !== '') {
+                $expWhere[] = 'e.expense_date <= ?';
+                $expParams[] = $toDate;
+            }
+            if ($branchId > 0) {
+                $expWhere[] = 'e.branch_id = ?';
+                $expParams[] = $branchId;
+            }
+            if ($paymentMethod !== '' && $paymentMethod !== 'all') {
+                $expWhere[] = 'e.payment_method = ?';
+                $expParams[] = $paymentMethod;
+            }
+            $expWhereSql = implode(' AND ', $expWhere);
+            $expQuery = $pdo->prepare("
+                SELECT e.*, b.name AS branch_name, b.code AS branch_code, s.full_name AS staff_name
+                FROM expenditures e
+                LEFT JOIN branches b ON b.id = e.branch_id
+                LEFT JOIN staff s ON s.id = e.staff_id
+                WHERE {$expWhereSql}
+                ORDER BY e.expense_date DESC, e.id DESC
+            ");
+            $expQuery->execute($expParams);
+            $matchedExpenditures = $expQuery->fetchAll();
+
+            $totalExpenditures = 0.0;
+            $expByCategory = [];
+            $expByDay = [];
+            $expByBranch = [];
+            foreach ($matchedExpenditures as $ex) {
+                $amt = (float)$ex['amount'];
+                $totalExpenditures += $amt;
+                $cat = $ex['category'] ?: 'General';
+                if (!isset($expByCategory[$cat])) {
+                    $expByCategory[$cat] = ['category' => $cat, 'count' => 0, 'amount' => 0.0];
+                }
+                $expByCategory[$cat]['count']++;
+                $expByCategory[$cat]['amount'] = round($expByCategory[$cat]['amount'] + $amt, 2);
+
+                $dKey = substr((string)$ex['expense_date'], 0, 10);
+                $expByDay[$dKey] = ($expByDay[$dKey] ?? 0.0) + $amt;
+
+                $ebId = (int)$ex['branch_id'];
+                $expByBranch[$ebId] = ($expByBranch[$ebId] ?? 0.0) + $amt;
+            }
+            usort($expByCategory, fn($a, $b) => $b['amount'] <=> $a['amount']);
 
             // Initialize Aggregations
             $kpis = [
@@ -890,16 +1046,22 @@ try {
                 'total_cogs' => 0.0,
                 'gross_profit' => 0.0,
                 'gross_margin_pct' => 0.0,
+                'total_expenditures' => round($totalExpenditures, 2),
+                'expenditures_count' => count($matchedExpenditures),
+                'net_operating_profit' => 0.0,
+                'net_operating_margin_pct' => 0.0,
                 'avg_order_value' => 0.0,
+                'avg_daily_revenue' => 0.0,
                 'paid_amount' => 0.0,
                 'unpaid_amount' => 0.0,
             ];
 
             $dailyMap = [];
             $paymentMethodMap = [
-                'Card' => ['method' => 'Card', 'count' => 0, 'amount' => 0.0],
                 'Cash' => ['method' => 'Cash', 'count' => 0, 'amount' => 0.0],
+                'MoMo' => ['method' => 'MoMo', 'count' => 0, 'amount' => 0.0],
                 'QR Pay' => ['method' => 'QR Pay', 'count' => 0, 'amount' => 0.0],
+                'Card' => ['method' => 'Card', 'count' => 0, 'amount' => 0.0],
                 'Split' => ['method' => 'Split', 'count' => 0, 'amount' => 0.0],
             ];
             $orderTypeMap = [
@@ -966,6 +1128,7 @@ try {
                         'net_sales' => 0.0,
                         'cogs' => 0.0,
                         'gross_profit' => 0.0,
+                        'expenditures' => round($expByDay[$dayKey] ?? 0.0, 2),
                         'tax' => 0.0,
                         'tips' => 0.0,
                     ];
@@ -987,7 +1150,7 @@ try {
                 }
 
                 // Payment Method Bucket
-                $pm = $ord['payment_method'] ?: 'Card';
+                $pm = $ord['payment_method'] ?: 'Cash';
                 if (!isset($paymentMethodMap[$pm])) {
                     $paymentMethodMap[$pm] = ['method' => $pm, 'count' => 0, 'amount' => 0.0];
                 }
@@ -1035,6 +1198,7 @@ try {
                         'orders_count' => 0,
                         'gross_revenue' => 0.0,
                         'net_sales' => 0.0,
+                        'expenditures' => round($expByBranch[$bid] ?? 0.0, 2),
                         'tax' => 0.0,
                         'tips' => 0.0,
                     ];
@@ -1086,6 +1250,7 @@ try {
             }
             unset($ord);
 
+            $distinctDays = max(1, count($dailyMap));
             $kpis['gross_revenue'] = round($kpis['gross_revenue'], 2);
             $kpis['net_subtotal'] = round($kpis['net_subtotal'], 2);
             $kpis['total_discounts'] = round($kpis['total_discounts'], 2);
@@ -1097,13 +1262,53 @@ try {
             $kpis['gross_margin_pct'] = $kpis['net_subtotal'] > 0
                 ? round(($kpis['gross_profit'] / $kpis['net_subtotal']) * 100, 1)
                 : 0.0;
+            $kpis['net_operating_profit'] = round($kpis['gross_profit'] - $kpis['total_expenditures'], 2);
+            $kpis['net_operating_margin_pct'] = $kpis['net_subtotal'] > 0
+                ? round(($kpis['net_operating_profit'] / $kpis['net_subtotal']) * 100, 1)
+                : 0.0;
             $kpis['avg_order_value'] = $kpis['valid_orders'] > 0
                 ? round($kpis['gross_revenue'] / $kpis['valid_orders'], 2)
                 : 0.0;
+            $kpis['avg_daily_revenue'] = round($kpis['gross_revenue'] / $distinctDays, 2);
+            $kpis['active_days_count'] = $distinctDays;
             $kpis['paid_amount'] = round($kpis['paid_amount'], 2);
             $kpis['unpaid_amount'] = round($kpis['unpaid_amount'], 2);
 
             ksort($dailyMap);
+
+            // If range exceeds 90 days, roll dailyMap up into monthly buckets for crisp chart rendering
+            $trendGranularity = 'daily';
+            $trendSeries = array_values($dailyMap);
+            if (count($dailyMap) > 90) {
+                $trendGranularity = 'monthly';
+                $monthlyMap = [];
+                foreach ($dailyMap as $dKey => $dRow) {
+                    $mKey = substr($dKey, 0, 7); // YYYY-MM
+                    if (!isset($monthlyMap[$mKey])) {
+                        $monthlyMap[$mKey] = [
+                            'date' => $mKey,
+                            'orders_count' => 0,
+                            'gross_revenue' => 0.0,
+                            'net_sales' => 0.0,
+                            'cogs' => 0.0,
+                            'gross_profit' => 0.0,
+                            'expenditures' => 0.0,
+                            'tax' => 0.0,
+                            'tips' => 0.0,
+                        ];
+                    }
+                    $monthlyMap[$mKey]['orders_count'] += $dRow['orders_count'];
+                    $monthlyMap[$mKey]['gross_revenue'] = round($monthlyMap[$mKey]['gross_revenue'] + $dRow['gross_revenue'], 2);
+                    $monthlyMap[$mKey]['net_sales'] = round($monthlyMap[$mKey]['net_sales'] + $dRow['net_sales'], 2);
+                    $monthlyMap[$mKey]['cogs'] = round($monthlyMap[$mKey]['cogs'] + $dRow['cogs'], 2);
+                    $monthlyMap[$mKey]['gross_profit'] = round($monthlyMap[$mKey]['gross_profit'] + $dRow['gross_profit'], 2);
+                    $monthlyMap[$mKey]['expenditures'] = round($monthlyMap[$mKey]['expenditures'] + ($dRow['expenditures'] ?? 0.0), 2);
+                    $monthlyMap[$mKey]['tax'] = round($monthlyMap[$mKey]['tax'] + $dRow['tax'], 2);
+                    $monthlyMap[$mKey]['tips'] = round($monthlyMap[$mKey]['tips'] + $dRow['tips'], 2);
+                }
+                $trendSeries = array_values($monthlyMap);
+            }
+
             usort($itemAgg, fn($a, $b) => $b['revenue'] <=> $a['revenue']);
             usort($categoryAgg, fn($a, $b) => $b['revenue'] <=> $a['revenue']);
             usort($staffAgg, fn($a, $b) => $b['gross_sales'] <=> $a['gross_sales']);
@@ -1111,15 +1316,19 @@ try {
 
             respond([
                 'kpis' => $kpis,
-                'daily_trend' => array_values($dailyMap),
+                'trend_granularity' => $trendGranularity,
+                'daily_trend' => $trendSeries,
                 'hourly_trend' => array_values($hourlyMap),
                 'payment_breakdown' => array_values($paymentMethodMap),
                 'order_type_breakdown' => array_values($orderTypeMap),
                 'category_breakdown' => array_values($categoryAgg),
+                'expenditure_breakdown' => array_values($expByCategory),
+                'expenditures' => array_slice($matchedExpenditures, 0, 100),
                 'top_items' => array_values($itemAgg),
                 'staff_performance' => array_values($staffAgg),
                 'branch_performance' => array_values($branchAgg),
-                'transactions' => $orders,
+                'transactions' => array_slice($orders, 0, 250),
+                'transactions_total_count' => count($orders),
             ]);
             break;
 

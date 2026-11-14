@@ -54,16 +54,16 @@ declare(strict_types=1);
         <div class="flex items-center gap-3.5">
             <div id="brandLogoText"
                  class="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 text-slate-950 font-extrabold text-sm flex items-center justify-center shadow-lg shadow-amber-500/20">
-                S&S
+                SD
             </div>
             <div>
                 <div class="flex items-center gap-2">
-                    <h1 id="brandCompanyName" class="font-bold text-sm tracking-tight text-white">Saffron & Slate Hospitality</h1>
+                    <h1 id="brandCompanyName" class="font-bold text-sm tracking-tight text-white">Shakes and Dessert</h1>
                     <span class="px-2 py-0.5 text-[10px] font-mono-num uppercase tracking-wider rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/30 font-bold">
-                        LITEROS v2.4
+                        KUMASI • GHS
                     </span>
                 </div>
-                <p id="brandTagline" class="text-[11px] text-slate-400">Artisanal Wood-Fired Kitchen & Lounge</p>
+                <p id="brandTagline" class="text-[11px] text-slate-400">Owner: Hajia Rabi Adam • Ayiduase, Sawaba & Dechemso</p>
             </div>
         </div>
 
@@ -143,6 +143,14 @@ declare(strict_types=1);
                         class="nav-btn w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs font-semibold text-slate-300 hover:text-white border border-transparent">
                     <i class="fa-solid fa-receipt text-base w-5 text-center"></i>
                     <span class="hidden lg:inline">Sales & Receipts</span>
+                </button>
+
+                <button data-tab="expenditures" onclick="LiterosApp.switchTab('expenditures')"
+                        class="nav-btn w-full flex items-center justify-between px-3.5 py-3 rounded-xl text-xs font-semibold text-slate-300 hover:text-white border border-transparent">
+                    <div class="flex items-center gap-3">
+                        <i class="fa-solid fa-wallet text-base w-5 text-center text-rose-400"></i>
+                        <span class="hidden lg:inline">Expenditures</span>
+                    </div>
                 </button>
 
                 <button data-tab="reports" onclick="LiterosApp.switchTab('reports')"
@@ -303,9 +311,9 @@ declare(strict_types=1);
                             </div>
                             <span class="text-slate-400 ml-1">Tip:</span>
                             <div class="flex gap-1">
-                                <button onclick="LiterosApp.setQuickTip(0)" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300">$0</button>
-                                <button onclick="LiterosApp.setQuickTip(5)" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-emerald-500 hover:text-slate-950 text-slate-300">+$5</button>
-                                <button onclick="LiterosApp.setQuickTip(15)" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-emerald-500 hover:text-slate-950 text-slate-300">+$15</button>
+                                <button onclick="LiterosApp.setQuickTip(0)" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300">¢0</button>
+                                <button onclick="LiterosApp.setQuickTip(20)" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-emerald-500 hover:text-slate-950 text-slate-300">+¢20</button>
+                                <button onclick="LiterosApp.setQuickTip(50)" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-emerald-500 hover:text-slate-950 text-slate-300">+¢50</button>
                             </div>
                         </div>
                     </div>
@@ -500,6 +508,119 @@ declare(strict_types=1);
             </section>
 
             <!-- =============================================================
+                 VIEW 4A-EXP: OPERATING EXPENDITURES & VENDOR PAYOUTS
+                 ============================================================= -->
+            <section id="view-expenditures" class="view-section hidden p-6 space-y-6">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                        <h2 class="text-xl font-bold text-white flex items-center gap-2.5">
+                            <i class="fa-solid fa-wallet text-rose-400"></i>
+                            Branch Operating Expenditures & Supplier Payouts
+                        </h2>
+                        <p class="text-xs text-slate-400 mt-0.5">Track dairy & ingredients restocking, packaging, ECG electricity/diesel, maintenance, and vendor disbursements via Cash or MoMo</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button onclick="LiterosApp.exportExpendituresCsv()"
+                                class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-white/10 text-xs font-bold text-slate-200 flex items-center gap-2">
+                            <i class="fa-solid fa-file-csv text-amber-400"></i>Export Expenses CSV
+                        </button>
+                        <button onclick="LiterosApp.openNewExpenditureModal()"
+                                class="px-4 py-2.5 rounded-xl bg-rose-500 hover:bg-rose-400 text-slate-950 font-extrabold text-xs shadow-lg shadow-rose-500/20 flex items-center gap-2">
+                            <i class="fa-solid fa-plus"></i>Record Expenditure
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Expenditure Summary KPI Cards -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div class="glass-panel rounded-2xl p-5 border border-rose-500/25">
+                        <div class="flex items-center justify-between text-xs text-slate-400">
+                            <span>Total Branch Expenditure (All-Time)</span>
+                            <i class="fa-solid fa-arrow-trend-down text-rose-400"></i>
+                        </div>
+                        <div id="expMetricTotalAmount" class="font-mono-num text-2xl font-extrabold text-rose-400 mt-1">GHS 0.00</div>
+                        <div id="expMetricTotalCount" class="text-[11px] text-slate-400 mt-2 font-mono-num">0 recorded vouchers</div>
+                    </div>
+
+                    <div class="glass-panel rounded-2xl p-5 border border-amber-500/25">
+                        <div class="flex items-center justify-between text-xs text-slate-400">
+                            <span>2026 YTD Operating Expenses</span>
+                            <i class="fa-solid fa-calendar-check text-amber-400"></i>
+                        </div>
+                        <div id="expMetricYtdAmount" class="font-mono-num text-2xl font-extrabold text-amber-400 mt-1">GHS 0.00</div>
+                        <div class="text-[11px] text-slate-400 mt-2">Current fiscal year (Jan – Nov 2026)</div>
+                    </div>
+
+                    <div class="glass-panel rounded-2xl p-5 border border-white/10">
+                        <div class="flex items-center justify-between text-xs text-slate-400">
+                            <span>Paid via Mobile Money (MoMo)</span>
+                            <i class="fa-solid fa-mobile-screen-button text-yellow-400"></i>
+                        </div>
+                        <div id="expMetricMomoAmount" class="font-mono-num text-2xl font-extrabold text-yellow-300 mt-1">GHS 0.00</div>
+                        <div class="text-[11px] text-slate-400 mt-2">Supplier MoMo transfers & ECG top-ups</div>
+                    </div>
+
+                    <div class="glass-panel rounded-2xl p-5 border border-white/10">
+                        <div class="flex items-center justify-between text-xs text-slate-400">
+                            <span>Paid via Physical Cash</span>
+                            <i class="fa-solid fa-money-bill-wave text-emerald-400"></i>
+                        </div>
+                        <div id="expMetricCashAmount" class="font-mono-num text-2xl font-extrabold text-emerald-400 mt-1">GHS 0.00</div>
+                        <div class="text-[11px] text-slate-400 mt-2">Kejetia wholesale & direct market payouts</div>
+                    </div>
+                </div>
+
+                <!-- Expenditures Ledger Table -->
+                <div class="glass-panel rounded-2xl border border-white/10 overflow-hidden">
+                    <div class="p-4 border-b border-white/10 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                        <input type="text"
+                               oninput="LiterosApp.setExpenditureSearch(this.value)"
+                               placeholder="Search by Ref # (EXP-5001), title, vendor (e.g. Kumasi ColdStore), or category..."
+                               class="px-3.5 py-2 rounded-xl bg-slate-900 border border-white/10 text-xs text-white outline-none w-full sm:w-96">
+                        <div class="flex items-center gap-2">
+                            <select onchange="LiterosApp.setExpenditureCategoryFilter(this.value)"
+                                    class="px-3.5 py-2 rounded-xl bg-slate-900 border border-white/10 text-xs text-slate-200 outline-none">
+                                <option value="all">All Expense Categories</option>
+                                <option value="Ingredients & Dairy">Ingredients & Dairy</option>
+                                <option value="Fruits, Nuts & Toppings">Fruits, Nuts & Toppings</option>
+                                <option value="Meat & Shawarma Supplies">Meat & Shawarma Supplies</option>
+                                <option value="Packaging & Cups">Packaging & Cups</option>
+                                <option value="Utilities & Generator Fuel">Utilities & Generator Fuel</option>
+                                <option value="Equipment & Maintenance">Equipment & Maintenance</option>
+                                <option value="Staff Welfare & Logistics">Staff Welfare & Logistics</option>
+                            </select>
+                            <select onchange="LiterosApp.setExpenditureMethodFilter(this.value)"
+                                    class="px-3.5 py-2 rounded-xl bg-slate-900 border border-white/10 text-xs text-slate-200 outline-none">
+                                <option value="all">All Payment Methods</option>
+                                <option value="MoMo">MoMo (Mobile Money)</option>
+                                <option value="Cash">Cash</option>
+                                <option value="QR Pay">QR Pay</option>
+                                <option value="Bank Transfer">Bank Transfer</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="border-b border-white/10 text-[11px] uppercase tracking-wider text-slate-400 bg-slate-950/60">
+                                    <th class="py-3 px-4">Voucher Ref</th>
+                                    <th class="py-3 px-4">Date</th>
+                                    <th class="py-3 px-4">Branch</th>
+                                    <th class="py-3 px-4">Category</th>
+                                    <th class="py-3 px-4">Description & Supplier</th>
+                                    <th class="py-3 px-4">Approved By</th>
+                                    <th class="py-3 px-4">Payment</th>
+                                    <th class="py-3 px-4 text-right">Amount</th>
+                                    <th class="py-3 px-4 text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="expendituresTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- =============================================================
                  VIEW 4B: FULL REPORTS & BUSINESS INTELLIGENCE SUITE
                  ============================================================= -->
             <section id="view-reports" class="view-section hidden p-6 space-y-6">
@@ -511,33 +632,45 @@ declare(strict_types=1);
                             Executive Financial Reports & Business Intelligence
                         </h2>
                         <p class="text-xs text-slate-400 mt-0.5">
-                            Filter by date range, branch, order channel, payment method, status, and sales personnel with interactive graphs & audit tables
+                            Filter Jan 2024 – Nov 2026 historical sales & expenditures across Ayiduase, Sawaba & Dechemso with live charts & audit tables
                         </p>
                     </div>
-                    <div class="flex flex-wrap items-center gap-2">
+                    <div class="flex flex-wrap items-center gap-1.5">
                         <button onclick="LiterosApp.setReportDatePreset('today')"
-                                class="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-white/10 text-xs font-semibold text-slate-300 hover:text-amber-300 transition">
+                                class="px-2.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-white/10 text-xs font-semibold text-slate-300 hover:text-amber-300 transition">
                             Today
                         </button>
                         <button onclick="LiterosApp.setReportDatePreset('7days')"
-                                class="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-white/10 text-xs font-semibold text-slate-300 hover:text-amber-300 transition">
-                            Last 7 Days
+                                class="px-2.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-white/10 text-xs font-semibold text-slate-300 hover:text-amber-300 transition">
+                            7 Days
                         </button>
                         <button onclick="LiterosApp.setReportDatePreset('30days')"
-                                class="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-white/10 text-xs font-semibold text-slate-300 hover:text-amber-300 transition">
-                            Last 30 Days
+                                class="px-2.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-white/10 text-xs font-semibold text-slate-300 hover:text-amber-300 transition">
+                            30 Days
+                        </button>
+                        <button onclick="LiterosApp.setReportDatePreset('2024')"
+                                class="px-2.5 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-xs font-bold text-emerald-300 transition">
+                            2024 (Boom)
+                        </button>
+                        <button onclick="LiterosApp.setReportDatePreset('2025')"
+                                class="px-2.5 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-xs font-bold text-emerald-300 transition">
+                            2025 (Peak)
+                        </button>
+                        <button onclick="LiterosApp.setReportDatePreset('2026')"
+                                class="px-2.5 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-xs font-bold text-amber-300 transition">
+                            2026 (YTD)
                         </button>
                         <button onclick="LiterosApp.setReportDatePreset('all')"
-                                class="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-white/10 text-xs font-semibold text-slate-300 hover:text-amber-300 transition">
-                            All Time
+                                class="px-2.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-white/10 text-xs font-semibold text-slate-300 hover:text-amber-300 transition">
+                            All Time (2024–2026)
                         </button>
                         <button onclick="LiterosApp.exportFullReportCsv()"
-                                class="px-4 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500 text-emerald-300 hover:text-slate-950 border border-emerald-500/40 text-xs font-bold flex items-center gap-1.5 transition">
-                            <i class="fa-solid fa-file-csv"></i>Export Filtered CSV
+                                class="px-3.5 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500 text-emerald-300 hover:text-slate-950 border border-emerald-500/40 text-xs font-bold flex items-center gap-1.5 transition">
+                            <i class="fa-solid fa-file-csv"></i>Export CSV
                         </button>
                         <button onclick="window.print()"
-                                class="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-extrabold flex items-center gap-1.5 transition">
-                            <i class="fa-solid fa-print"></i>Print Report
+                                class="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-extrabold flex items-center gap-1.5 transition">
+                            <i class="fa-solid fa-print"></i>Print
                         </button>
                     </div>
                 </div>
@@ -578,9 +711,10 @@ declare(strict_types=1);
                             <select id="repPaymentMethod" name="payment_method"
                                     class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-xs text-white outline-none focus:border-amber-500">
                                 <option value="all">All Payment Methods</option>
+                                <option value="Cash">Physical Cash (60%)</option>
+                                <option value="MoMo">MoMo / Mobile Money (35%)</option>
+                                <option value="QR Pay">QR Pay (5%)</option>
                                 <option value="Card">Card</option>
-                                <option value="Cash">Cash</option>
-                                <option value="QR Pay">QR Pay</option>
                                 <option value="Split">Split Bill</option>
                             </select>
                         </div>
@@ -634,15 +768,15 @@ declare(strict_types=1);
                     </div>
                 </form>
 
-                <!-- 6 Executive Financial KPI Cards -->
+                <!-- 6 Executive Financial KPI Cards (Including Expenditures & Net Operating Profit) -->
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
                     <div class="glass-panel rounded-2xl p-4 border border-emerald-500/25">
                         <div class="flex items-center justify-between text-[11px] text-slate-400">
-                            <span>Gross Revenue</span>
+                            <span>Gross Sales Revenue</span>
                             <i class="fa-solid fa-sack-dollar text-emerald-400"></i>
                         </div>
-                        <div id="repKpiGrossRevenue" class="font-mono-num text-xl font-extrabold text-emerald-400 mt-1">$0.00</div>
-                        <div id="repKpiPaidSplit" class="text-[10px] text-slate-400 mt-1 font-mono-num">Paid: $0.00 • Unpaid: $0.00</div>
+                        <div id="repKpiGrossRevenue" class="font-mono-num text-lg font-extrabold text-emerald-400 mt-1">GHS 0.00</div>
+                        <div id="repKpiPaidSplit" class="text-[10px] text-slate-400 mt-1 font-mono-num">Daily Avg: GHS 0.00</div>
                     </div>
 
                     <div class="glass-panel rounded-2xl p-4 border border-white/10">
@@ -650,8 +784,8 @@ declare(strict_types=1);
                             <span>Net Food & Drink Sales</span>
                             <i class="fa-solid fa-receipt text-amber-400"></i>
                         </div>
-                        <div id="repKpiNetSales" class="font-mono-num text-xl font-extrabold text-white mt-1">$0.00</div>
-                        <div id="repKpiDiscounts" class="text-[10px] text-rose-400 mt-1 font-mono-num">Discounts: -$0.00</div>
+                        <div id="repKpiNetSales" class="font-mono-num text-lg font-extrabold text-white mt-1">GHS 0.00</div>
+                        <div id="repKpiDiscounts" class="text-[10px] text-slate-400 mt-1 font-mono-num">Tax+Svc: GHS 0.00</div>
                     </div>
 
                     <div class="glass-panel rounded-2xl p-4 border border-amber-500/25">
@@ -659,35 +793,35 @@ declare(strict_types=1);
                             <span>Gross Profit (After COGS)</span>
                             <i class="fa-solid fa-chart-line text-amber-400"></i>
                         </div>
-                        <div id="repKpiGrossProfit" class="font-mono-num text-xl font-extrabold text-amber-400 mt-1">$0.00</div>
-                        <div id="repKpiMarginPct" class="text-[10px] text-emerald-300 mt-1 font-mono-num">COGS: $0.00 (0% Margin)</div>
+                        <div id="repKpiGrossProfit" class="font-mono-num text-lg font-extrabold text-amber-400 mt-1">GHS 0.00</div>
+                        <div id="repKpiMarginPct" class="text-[10px] text-emerald-300 mt-1 font-mono-num">COGS: GHS 0.00 (0% Margin)</div>
                     </div>
 
-                    <div class="glass-panel rounded-2xl p-4 border border-white/10">
+                    <div class="glass-panel rounded-2xl p-4 border border-rose-500/25">
                         <div class="flex items-center justify-between text-[11px] text-slate-400">
-                            <span>Tax & Service Charges</span>
-                            <i class="fa-solid fa-scale-balanced text-cyan-400"></i>
+                            <span>Operating Expenditures</span>
+                            <i class="fa-solid fa-wallet text-rose-400"></i>
                         </div>
-                        <div id="repKpiTaxService" class="font-mono-num text-xl font-extrabold text-cyan-300 mt-1">$0.00</div>
-                        <div id="repKpiTaxBreakdown" class="text-[10px] text-slate-400 mt-1 font-mono-num">Tax: $0.00 • Svc: $0.00</div>
+                        <div id="repKpiTaxService" class="font-mono-num text-lg font-extrabold text-rose-400 mt-1">GHS 0.00</div>
+                        <div id="repKpiTaxBreakdown" class="text-[10px] text-slate-400 mt-1 font-mono-num">0 expense vouchers</div>
                     </div>
 
-                    <div class="glass-panel rounded-2xl p-4 border border-white/10">
+                    <div class="glass-panel rounded-2xl p-4 border border-cyan-500/25">
                         <div class="flex items-center justify-between text-[11px] text-slate-400">
-                            <span>Tips & Gratuity</span>
-                            <i class="fa-solid fa-hand-holding-dollar text-indigo-400"></i>
+                            <span>Net Operating Profit</span>
+                            <i class="fa-solid fa-vault text-cyan-400"></i>
                         </div>
-                        <div id="repKpiTips" class="font-mono-num text-xl font-extrabold text-indigo-300 mt-1">$0.00</div>
-                        <div id="repKpiGuestsCount" class="text-[10px] text-slate-400 mt-1 font-mono-num">0 Guests Served</div>
+                        <div id="repKpiTips" class="font-mono-num text-lg font-extrabold text-cyan-300 mt-1">GHS 0.00</div>
+                        <div id="repKpiGuestsCount" class="text-[10px] text-slate-400 mt-1 font-mono-num">After COGS & Expenditures</div>
                     </div>
 
                     <div class="glass-panel rounded-2xl p-4 border border-white/10">
                         <div class="flex items-center justify-between text-[11px] text-slate-400">
                             <span>Orders & Avg Check</span>
-                            <i class="fa-solid fa-basket-shopping text-rose-400"></i>
+                            <i class="fa-solid fa-basket-shopping text-indigo-400"></i>
                         </div>
-                        <div id="repKpiOrdersCount" class="font-mono-num text-xl font-extrabold text-white mt-1">0</div>
-                        <div id="repKpiAvgCheck" class="text-[10px] text-amber-300 mt-1 font-mono-num">Avg Ticket: $0.00</div>
+                        <div id="repKpiOrdersCount" class="font-mono-num text-lg font-extrabold text-white mt-1">0</div>
+                        <div id="repKpiAvgCheck" class="text-[10px] text-amber-300 mt-1 font-mono-num">Avg Batch: GHS 0.00</div>
                     </div>
                 </div>
 
@@ -944,9 +1078,13 @@ declare(strict_types=1);
                 <form id="companyProfileForm" onsubmit="LiterosApp.submitCompanyProfile(event)"
                       class="glass-panel rounded-2xl p-6 border border-white/10 space-y-4">
                     <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        <div class="sm:col-span-2">
-                            <label class="block text-xs text-slate-400 mb-1">Company / Restaurant Group Name</label>
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">Company / Restaurant Brand Name</label>
                             <input name="name" required class="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-white/10 text-xs text-white">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">Owner / Proprietor Name</label>
+                            <input name="owner_name" required placeholder="Hajia Rabi Adam" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-white/10 text-xs text-amber-300 font-bold">
                         </div>
                         <div>
                             <label class="block text-xs text-slate-400 mb-1">Logo Monogram (Max 4 chars)</label>
@@ -1058,21 +1196,25 @@ declare(strict_types=1);
 
             <div>
                 <label class="block text-xs text-slate-400 mb-2">Select Payment Method</label>
-                <div class="grid grid-cols-4 gap-2">
-                    <button type="button" data-method="Card" onclick="LiterosApp.selectPaymentMethod('Card')"
-                            class="pay-method-btn p-3 rounded-xl border bg-amber-500/20 border-amber-500 text-amber-300 text-xs font-semibold flex flex-col items-center gap-1.5">
-                        <i class="fa-solid fa-credit-card text-base"></i>Card
-                    </button>
+                <div class="grid grid-cols-5 gap-2">
                     <button type="button" data-method="Cash" onclick="LiterosApp.selectPaymentMethod('Cash')"
-                            class="pay-method-btn p-3 rounded-xl border bg-slate-900 border-white/10 text-slate-400 text-xs font-semibold flex flex-col items-center gap-1.5">
+                            class="pay-method-btn p-2.5 rounded-xl border bg-amber-500/20 border-amber-500 text-amber-300 text-xs font-semibold flex flex-col items-center gap-1.5">
                         <i class="fa-solid fa-money-bill-wave text-base"></i>Cash
                     </button>
+                    <button type="button" data-method="MoMo" onclick="LiterosApp.selectPaymentMethod('MoMo')"
+                            class="pay-method-btn p-2.5 rounded-xl border bg-slate-900 border-white/10 text-slate-400 text-xs font-semibold flex flex-col items-center gap-1.5">
+                        <i class="fa-solid fa-mobile-screen-button text-base"></i>MoMo
+                    </button>
                     <button type="button" data-method="QR Pay" onclick="LiterosApp.selectPaymentMethod('QR Pay')"
-                            class="pay-method-btn p-3 rounded-xl border bg-slate-900 border-white/10 text-slate-400 text-xs font-semibold flex flex-col items-center gap-1.5">
+                            class="pay-method-btn p-2.5 rounded-xl border bg-slate-900 border-white/10 text-slate-400 text-xs font-semibold flex flex-col items-center gap-1.5">
                         <i class="fa-solid fa-qrcode text-base"></i>QR Pay
                     </button>
+                    <button type="button" data-method="Card" onclick="LiterosApp.selectPaymentMethod('Card')"
+                            class="pay-method-btn p-2.5 rounded-xl border bg-slate-900 border-white/10 text-slate-400 text-xs font-semibold flex flex-col items-center gap-1.5">
+                        <i class="fa-solid fa-credit-card text-base"></i>Card
+                    </button>
                     <button type="button" data-method="Split" onclick="LiterosApp.selectPaymentMethod('Split')"
-                            class="pay-method-btn p-3 rounded-xl border bg-slate-900 border-white/10 text-slate-400 text-xs font-semibold flex flex-col items-center gap-1.5">
+                            class="pay-method-btn p-2.5 rounded-xl border bg-slate-900 border-white/10 text-slate-400 text-xs font-semibold flex flex-col items-center gap-1.5">
                         <i class="fa-solid fa-arrows-split-up-and-left text-base"></i>Split
                     </button>
                 </div>
@@ -1362,6 +1504,85 @@ declare(strict_types=1);
         </form>
     </div>
 
+    <!-- 7B. Record / Edit Expenditure Modal -->
+    <div id="expenditureModal" class="hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+        <form id="expenditureForm" onsubmit="LiterosApp.submitExpenditureForm(event)"
+              class="glass-panel rounded-2xl max-w-lg w-full p-6 border border-white/15 space-y-3.5">
+            <input type="hidden" name="id">
+            <div class="flex items-center justify-between border-b border-white/10 pb-3">
+                <h3 id="expenditureModalTitle" class="font-bold text-base text-white">
+                    <i class="fa-solid fa-wallet text-rose-400 mr-1.5"></i>Record Branch Expenditure
+                </h3>
+                <button type="button" onclick="LiterosApp.closeModal('expenditureModal')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Branch Location</label>
+                    <select id="expFormBranchSelect" name="branch_id" class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-xs text-white"></select>
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Expense Category</label>
+                    <select name="category" class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-xs text-white">
+                        <option value="Ingredients & Dairy">Ingredients & Dairy</option>
+                        <option value="Fruits, Nuts & Toppings">Fruits, Nuts & Toppings</option>
+                        <option value="Meat & Shawarma Supplies">Meat & Shawarma Supplies</option>
+                        <option value="Packaging & Cups">Packaging & Cups</option>
+                        <option value="Utilities & Generator Fuel">Utilities & Generator Fuel</option>
+                        <option value="Equipment & Maintenance">Equipment & Maintenance</option>
+                        <option value="Staff Welfare & Logistics">Staff Welfare & Logistics</option>
+                    </select>
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-xs text-slate-400 mb-1">Expenditure Description / Title</label>
+                <input name="title" required placeholder="e.g. Bulk Whipping Cream, Biscoff Spread & Nutella Restock"
+                       class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-xs text-white">
+            </div>
+
+            <div class="grid grid-cols-3 gap-3">
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Amount (GHS)</label>
+                    <input name="amount" type="number" step="0.01" required placeholder="4500.00"
+                           class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-xs text-rose-300 font-mono-num font-bold">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Payment Method</label>
+                    <select name="payment_method" class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-xs text-white">
+                        <option value="MoMo">MoMo (Mobile Money)</option>
+                        <option value="Cash">Physical Cash</option>
+                        <option value="QR Pay">QR Pay</option>
+                        <option value="Bank Transfer">Bank Transfer</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Expense Date</label>
+                    <input name="expense_date" type="date" required
+                           class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-xs text-white font-mono-num">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Supplier / Vendor Name</label>
+                    <input name="vendor_name" placeholder="e.g. Kumasi ColdStore & Dairy Ltd"
+                           class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-xs text-white">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Approval / Voucher Note</label>
+                    <input name="notes" placeholder="e.g. Approved by Hajia Rabi Adam"
+                           class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-xs text-white">
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-2 pt-2">
+                <button type="button" onclick="LiterosApp.closeModal('expenditureModal')" class="px-4 py-2 rounded-xl bg-slate-800 text-xs text-slate-300">Cancel</button>
+                <button type="submit" class="px-5 py-2 rounded-xl bg-rose-500 hover:bg-rose-400 text-slate-950 font-extrabold text-xs">Save Expenditure</button>
+            </div>
+        </form>
+    </div>
+
     <!-- 8. Quick Operator PIN Switcher Modal -->
     <div id="pinModal" class="hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
         <form onsubmit="LiterosApp.submitPinSwitch(event)"
@@ -1371,7 +1592,7 @@ declare(strict_types=1);
             </div>
             <div>
                 <h3 class="font-bold text-base text-white">Operator PIN Switch</h3>
-                <p class="text-[11px] text-slate-400 mt-1">Demo PINs: <strong class="text-amber-300">1111</strong> (Admin), <strong class="text-emerald-300">2222</strong> (Cashier), <strong class="text-indigo-300">3333</strong> (Waiter)</p>
+                <p class="text-[11px] text-slate-400 mt-1">Demo PINs: <strong class="text-amber-300">1111</strong> (Hajia Rabi), <strong class="text-emerald-300">2101</strong> (Mgr), <strong class="text-indigo-300">2102</strong> (Cashier)</p>
             </div>
             <input id="quickPinInput" type="password" maxlength="8" required placeholder="••••"
                    class="w-full py-3 rounded-xl bg-slate-950 border border-white/15 text-center font-mono-num text-xl tracking-widest text-white outline-none focus:border-amber-500">
@@ -1393,11 +1614,11 @@ declare(strict_types=1);
                     <div class="flex items-center gap-3 mb-6">
                         <div id="loginBrandLogo"
                              class="w-11 h-11 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-slate-950 font-extrabold text-base flex items-center justify-center shadow-lg shadow-amber-500/25">
-                            S&S
+                            SD
                         </div>
                         <div>
-                            <h2 id="loginBrandName" class="text-base font-extrabold text-white tracking-tight">Saffron & Slate Hospitality</h2>
-                            <p class="text-[11px] text-amber-400 font-medium">LITEROS Restaurant OS • Terminal Login</p>
+                            <h2 id="loginBrandName" class="text-base font-extrabold text-white tracking-tight">Shakes and Dessert</h2>
+                            <p class="text-[11px] text-amber-400 font-medium">Kumasi, Ghana • Owner: Hajia Rabi Adam</p>
                         </div>
                     </div>
 
@@ -1410,7 +1631,7 @@ declare(strict_types=1);
                                 <i class="fa-solid fa-id-card-clip absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 text-xs"></i>
                                 <input id="loginIdentifierInput"
                                        type="text"
-                                       placeholder="e.g. elena@saffronandslate.com or EMP-001"
+                                       placeholder="e.g. hajia.rabi@shakesanddessert.com.gh or SD-HQ-01"
                                        class="w-full pl-9 pr-3.5 py-2.5 rounded-xl bg-slate-950 border border-white/10 focus:border-amber-500 text-xs text-white outline-none">
                             </div>
                         </div>
@@ -1461,31 +1682,39 @@ declare(strict_types=1);
 
                 <div class="pt-5 mt-5 border-t border-white/10 flex items-center justify-between text-[11px] text-slate-400">
                     <span><i class="fa-solid fa-shield-halved text-emerald-400 mr-1"></i>Role-Based Shift Tracking</span>
-                    <span class="font-mono-num">PHP 8 • MySQL</span>
+                    <span class="font-mono-num">Kumasi • GHS (¢)</span>
                 </div>
             </div>
 
             <!-- Right Column: Seeded Demo Credentials Directory (7 Cols) -->
             <div class="lg:col-span-7 p-7 sm:p-8 flex flex-col justify-between bg-[#090c14]">
                 <div>
-                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-white/10">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-white/10">
                         <div>
                             <span class="px-2.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold uppercase tracking-wider">
-                                Seeded Demo Accounts
+                                Shakes and Dessert • 31 Seeded Personnel
                             </span>
                             <h3 class="text-base font-bold text-white mt-1.5">Click Any Demo Account Below to Auto-Fill & Sign In</h3>
-                            <p class="text-xs text-slate-400">All 7 seeded restaurant personnel across your 3 branches are listed below with their credentials:</p>
+                            <p class="text-xs text-slate-400">Owner Hajia Rabi Adam + 3 Kumasi Branches (Ayiduase, Sawaba, Dechemso — each with 1 Manager, 1 Cashier, 4 Waitresses, 4 Chefs):</p>
                         </div>
                     </div>
 
+                    <!-- Branch Filter Pills for Login Credentials -->
+                    <div id="loginBranchFilterBar" class="flex flex-wrap items-center gap-1.5 mt-3">
+                        <button type="button" data-bfilter="all" onclick="LiterosApp.setLoginBranchFilter('all')" class="login-bfilter-btn px-2.5 py-1 rounded-lg bg-amber-500 text-slate-950 text-[11px] font-extrabold">All Staff (31)</button>
+                        <button type="button" data-bfilter="1" onclick="LiterosApp.setLoginBranchFilter('1')" class="login-bfilter-btn px-2.5 py-1 rounded-lg bg-slate-900 border border-white/10 text-slate-300 text-[11px] font-semibold">Branch 1: Ayiduase</button>
+                        <button type="button" data-bfilter="2" onclick="LiterosApp.setLoginBranchFilter('2')" class="login-bfilter-btn px-2.5 py-1 rounded-lg bg-slate-900 border border-white/10 text-slate-300 text-[11px] font-semibold">Branch 2: Sawaba</button>
+                        <button type="button" data-bfilter="3" onclick="LiterosApp.setLoginBranchFilter('3')" class="login-bfilter-btn px-2.5 py-1 rounded-lg bg-slate-900 border border-white/10 text-slate-300 text-[11px] font-semibold">Branch 3: Dechemso</button>
+                    </div>
+
                     <!-- Dynamic Demo Credentials Table / Cards -->
-                    <div id="loginDemoCredentialsList" class="mt-4 space-y-2.5 max-h-[380px] overflow-y-auto pr-1"></div>
+                    <div id="loginDemoCredentialsList" class="mt-3 space-y-2 max-h-[360px] overflow-y-auto pr-1"></div>
                 </div>
 
                 <div class="mt-5 p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/25 flex items-start gap-3 text-xs text-amber-200">
                     <i class="fa-solid fa-circle-info text-amber-400 mt-0.5"></i>
                     <div>
-                        <strong>Tip:</strong> Clicking any staff row above automatically fills their <strong>Email / Employee ID</strong> and <strong>PIN Code</strong>. You can also click <strong>Quick Sign-In</strong> on any row to log in immediately.
+                        <strong>Tip:</strong> Sign in as <strong>Hajia Rabi Adam (PIN: 1111)</strong> for full Executive HQ & Multi-Branch Reports (2024–2026), or click any Branch Manager, Cashier, Waitress, or Chef row above.
                     </div>
                 </div>
             </div>

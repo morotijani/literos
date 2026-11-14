@@ -1,12 +1,14 @@
 -- =============================================================================
 -- LITEROS — Lite Restaurant Operating System
--- Complete MySQL Schema & Rich Demo Seed Data
+-- Complete MySQL Schema & Rich Seed Data for "Shakes and Dessert" (Kumasi, Ghana)
+-- Owner: Hajia Rabi Adam | Currency: GHS (¢)
 -- =============================================================================
 
 CREATE DATABASE IF NOT EXISTS `literos` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE `literos`;
 
 SET FOREIGN_KEY_CHECKS = 0;
+DROP TABLE IF EXISTS `expenditures`;
 DROP TABLE IF EXISTS `order_items`;
 DROP TABLE IF EXISTS `orders`;
 DROP TABLE IF EXISTS `shifts`;
@@ -22,16 +24,17 @@ SET FOREIGN_KEY_CHECKS = 1;
 CREATE TABLE `company_profile` (
   `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   `name` VARCHAR(120) NOT NULL,
-  `tagline` VARCHAR(200) DEFAULT 'Culinary Craft & Hospitality OS',
-  `logo_text` VARCHAR(20) DEFAULT 'LR',
-  `currency_symbol` VARCHAR(10) DEFAULT '$',
-  `currency_code` VARCHAR(10) DEFAULT 'USD',
-  `tax_rate` DECIMAL(5,2) DEFAULT 8.50,
-  `service_charge_rate` DECIMAL(5,2) DEFAULT 5.00,
-  `email` VARCHAR(120) DEFAULT 'hq@lumina-hospitality.com',
-  `phone` VARCHAR(40) DEFAULT '+1 (555) 234-8900',
-  `address` VARCHAR(255) DEFAULT '742 Evergreen Culinary Plaza, Suite 400, New York, NY',
-  `receipt_footer` VARCHAR(255) DEFAULT 'Thank you for dining with us! Powered by Literos POS.',
+  `owner_name` VARCHAR(120) DEFAULT 'Hajia Rabi Adam',
+  `tagline` VARCHAR(200) DEFAULT 'Artisanal Milkshakes, Gelato, Pastries & Grill • Kumasi, Ghana',
+  `logo_text` VARCHAR(20) DEFAULT 'S&D',
+  `currency_symbol` VARCHAR(10) DEFAULT 'GHS ',
+  `currency_code` VARCHAR(10) DEFAULT 'GHS',
+  `tax_rate` DECIMAL(5,2) DEFAULT 6.00,
+  `service_charge_rate` DECIMAL(5,2) DEFAULT 2.50,
+  `email` VARCHAR(120) DEFAULT 'hq@shakesanddessertgh.com',
+  `phone` VARCHAR(40) DEFAULT '+233 24 489 1020',
+  `address` VARCHAR(255) DEFAULT 'KNUST Commercial Road, Ayiduase, Kumasi, Ashanti Region, Ghana',
+  `receipt_footer` VARCHAR(255) DEFAULT 'Medaase! Thank you for dining at Shakes and Dessert (By Hajia Rabi Adam).',
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
@@ -61,8 +64,8 @@ CREATE TABLE `staff` (
   `email` VARCHAR(120) DEFAULT NULL,
   `phone` VARCHAR(40) DEFAULT NULL,
   `avatar_color` VARCHAR(20) DEFAULT '#f59e0b',
-  `hourly_rate` DECIMAL(8,2) DEFAULT 18.50,
-  `commission_rate` DECIMAL(5,2) DEFAULT 2.00,
+  `hourly_rate` DECIMAL(10,2) DEFAULT 45.00,
+  `commission_rate` DECIMAL(5,2) DEFAULT 1.50,
   `is_active` TINYINT(1) DEFAULT 1,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT `fk_staff_branch` FOREIGN KEY (`branch_id`) REFERENCES `branches`(`id`) ON DELETE CASCADE
@@ -88,13 +91,13 @@ CREATE TABLE `menu_items` (
   `description` VARCHAR(255) DEFAULT '',
   `price` DECIMAL(10,2) NOT NULL,
   `cost` DECIMAL(10,2) NOT NULL DEFAULT 0.00,
-  `course_type` ENUM('Starter', 'Main', 'Drink', 'Dessert', 'Side') DEFAULT 'Main',
-  `prep_time_mins` INT DEFAULT 12,
+  `course_type` ENUM('Starter', 'Main', 'Drink', 'Dessert', 'Side') DEFAULT 'Dessert',
+  `prep_time_mins` INT DEFAULT 8,
   `calories` INT DEFAULT 450,
-  `stock_qty` INT DEFAULT 100,
-  `low_stock_threshold` INT DEFAULT 15,
+  `stock_qty` INT DEFAULT 200,
+  `low_stock_threshold` INT DEFAULT 20,
   `modifiers_json` TEXT DEFAULT NULL,
-  `image_emoji` VARCHAR(20) DEFAULT '🍽️',
+  `image_emoji` VARCHAR(20) DEFAULT '🥤',
   `is_popular` TINYINT(1) DEFAULT 0,
   `is_available` TINYINT(1) DEFAULT 1,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -119,8 +122,8 @@ CREATE TABLE `shifts` (
   `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   `branch_id` INT UNSIGNED NOT NULL,
   `staff_id` INT UNSIGNED NOT NULL,
-  `opening_cash` DECIMAL(10,2) NOT NULL DEFAULT 250.00,
-  `closing_cash` DECIMAL(10,2) DEFAULT NULL,
+  `opening_cash` DECIMAL(12,2) NOT NULL DEFAULT 2500.00,
+  `closing_cash` DECIMAL(12,2) DEFAULT NULL,
   `status` ENUM('Open', 'Closed') DEFAULT 'Open',
   `notes` VARCHAR(255) DEFAULT NULL,
   `opened_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -139,19 +142,22 @@ CREATE TABLE `orders` (
   `customer_name` VARCHAR(100) DEFAULT 'Walk-in Guest',
   `guests_count` INT DEFAULT 1,
   `order_type` ENUM('Dine-In', 'Takeaway', 'Delivery') NOT NULL DEFAULT 'Dine-In',
-  `status` ENUM('Pending', 'Preparing', 'Ready', 'Served', 'Completed', 'Cancelled') NOT NULL DEFAULT 'Preparing',
+  `status` ENUM('Pending', 'Preparing', 'Ready', 'Served', 'Completed', 'Cancelled') NOT NULL DEFAULT 'Completed',
   `payment_status` ENUM('Unpaid', 'Paid', 'Refunded') NOT NULL DEFAULT 'Paid',
-  `payment_method` ENUM('Cash', 'Card', 'QR Pay', 'Split') DEFAULT 'Card',
-  `subtotal` DECIMAL(10,2) NOT NULL DEFAULT 0.00,
-  `tax_amount` DECIMAL(10,2) NOT NULL DEFAULT 0.00,
-  `service_charge` DECIMAL(10,2) NOT NULL DEFAULT 0.00,
-  `discount_amount` DECIMAL(10,2) NOT NULL DEFAULT 0.00,
-  `tip_amount` DECIMAL(10,2) NOT NULL DEFAULT 0.00,
-  `total_amount` DECIMAL(10,2) NOT NULL DEFAULT 0.00,
-  `amount_tendered` DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+  `payment_method` ENUM('Cash', 'MoMo', 'QR Pay', 'Card', 'Split') DEFAULT 'Cash',
+  `subtotal` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+  `tax_amount` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+  `service_charge` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+  `discount_amount` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+  `tip_amount` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+  `total_amount` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+  `amount_tendered` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
   `notes` VARCHAR(255) DEFAULT NULL,
-  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  `completed_at` TIMESTAMP NULL DEFAULT NULL,
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  `completed_at` DATETIME NULL DEFAULT NULL,
+  INDEX `idx_orders_created_at` (`created_at`),
+  INDEX `idx_orders_branch_date` (`branch_id`, `created_at`),
+  INDEX `idx_orders_payment_method` (`payment_method`),
   CONSTRAINT `fk_order_branch` FOREIGN KEY (`branch_id`) REFERENCES `branches`(`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_order_staff` FOREIGN KEY (`staff_id`) REFERENCES `staff`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB;
@@ -162,136 +168,135 @@ CREATE TABLE `order_items` (
   `order_id` INT UNSIGNED NOT NULL,
   `menu_item_id` INT UNSIGNED NOT NULL,
   `item_name` VARCHAR(140) NOT NULL,
-  `unit_price` DECIMAL(10,2) NOT NULL,
-  `unit_cost` DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+  `unit_price` DECIMAL(12,2) NOT NULL,
+  `unit_cost` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
   `quantity` INT NOT NULL DEFAULT 1,
   `modifiers` VARCHAR(255) DEFAULT NULL,
-  `line_total` DECIMAL(10,2) NOT NULL,
-  `kitchen_status` ENUM('Queued', 'Cooking', 'Plated') DEFAULT 'Cooking',
+  `line_total` DECIMAL(12,2) NOT NULL,
+  `kitchen_status` ENUM('Queued', 'Cooking', 'Plated') DEFAULT 'Plated',
+  INDEX `idx_orderitems_order` (`order_id`),
   CONSTRAINT `fk_orderitem_order` FOREIGN KEY (`order_id`) REFERENCES `orders`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
+-- 10. Expenditures / Operating Expenses
+CREATE TABLE `expenditures` (
+  `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `reference_no` VARCHAR(32) NOT NULL UNIQUE,
+  `branch_id` INT UNSIGNED NOT NULL,
+  `staff_id` INT UNSIGNED NOT NULL,
+  `category` VARCHAR(80) NOT NULL DEFAULT 'Ingredients & Dairy',
+  `title` VARCHAR(160) NOT NULL,
+  `vendor_name` VARCHAR(120) DEFAULT NULL,
+  `payment_method` ENUM('Cash', 'MoMo', 'QR Pay', 'Bank Transfer', 'Card') NOT NULL DEFAULT 'MoMo',
+  `amount` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+  `expense_date` DATE NOT NULL,
+  `notes` VARCHAR(255) DEFAULT NULL,
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  INDEX `idx_exp_date` (`expense_date`),
+  INDEX `idx_exp_branch_date` (`branch_id`, `expense_date`),
+  CONSTRAINT `fk_exp_branch` FOREIGN KEY (`branch_id`) REFERENCES `branches`(`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_exp_staff` FOREIGN KEY (`staff_id`) REFERENCES `staff`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
 -- =============================================================================
--- SEED DATA
+-- STATIC CORE SEED DATA (COMPANY, 3 KUMASI BRANCHES, 31 PERSONNEL, MENU, TABLES)
 -- =============================================================================
 
-INSERT INTO `company_profile` (`id`, `name`, `tagline`, `logo_text`, `currency_symbol`, `currency_code`, `tax_rate`, `service_charge_rate`, `email`, `phone`, `address`, `receipt_footer`) VALUES
-(1, 'Saffron & Slate Hospitality Group', 'Artisanal Wood-Fired Kitchen & Lounge', 'S&S', '$', 'USD', 8.25, 5.00, 'concierge@saffronandslate.com', '+1 (212) 555-0194', '480 Mercer Street, SoHo, New York, NY 10013', 'Thank you for dining at Saffron & Slate! Follow us @saffronandslate');
+INSERT INTO `company_profile` (`id`, `name`, `owner_name`, `tagline`, `logo_text`, `currency_symbol`, `currency_code`, `tax_rate`, `service_charge_rate`, `email`, `phone`, `address`, `receipt_footer`) VALUES
+(1, 'Shakes and Dessert', 'Hajia Rabi Adam', 'Signature Milkshakes, Artisanal Desserts & Savoury Grill • Kumasi, Ghana', 'S&D', 'GHS ', 'GHS', 6.00, 2.50, 'hajia.rabi@shakesanddessertgh.com', '+233 24 489 1020', 'KNUST Commercial Road, Ayiduase, Kumasi, Ashanti Region, Ghana', 'Medaase! Thank you for patronizing Shakes and Dessert • Owned by Hajia Rabi Adam');
 
 INSERT INTO `branches` (`id`, `code`, `name`, `city`, `address`, `phone`, `manager_name`, `opening_hours`, `tax_override`, `is_active`) VALUES
-(1, 'NYC-SOHO', 'SoHo Flagship Bistro', 'New York', '480 Mercer St, SoHo, NY 10013', '+1 (212) 555-0194', 'Elena Rostova', '08:00 AM - 12:00 AM', NULL, 1),
-(2, 'BRK-WBG', 'Williamsburg Waterfront Grill', 'Brooklyn', '114 Wythe Ave, Brooklyn, NY 11249', '+1 (718) 555-0281', 'Marcus Vance', '10:00 AM - 01:00 AM', 8.88, 1),
-(3, 'MIA-WYN', 'Wynwood Garden Terrace', 'Miami', '2550 NW 2nd Ave, Miami, FL 33127', '+1 (305) 555-0842', 'Mateo Silva', '11:00 AM - 11:30 PM', 7.00, 1);
+(1, 'KSI-AYI', 'Ayiduase Flagship Branch', 'Kumasi (Ayiduase)', 'KNUST New Site Road, Near Ayiduase Gate, Kumasi', '+233 24 489 1021', 'Alhaji Sulemana Issah', '08:00 AM - 11:30 PM', NULL, 1),
+(2, 'KSI-SAW', 'Sawaba Junction Lounge', 'Kumasi (Sawaba)', 'Sawaba Main Road, Opposite Central Mosque, Kumasi', '+233 24 489 1022', 'Mariam Abdul-Rahman', '08:30 AM - 11:00 PM', NULL, 1),
+(3, 'KSI-DEC', 'Dechemso Plaza Terrace', 'Kumasi (Dechemso)', 'Airport Roundabout - Dechemso Link, Kumasi', '+233 24 489 1023', 'Kwame Osei Bonsu', '09:00 AM - 11:30 PM', NULL, 1);
 
+-- 31 Personnel:
+-- 1 Owner/Executive Admin (Hajia Rabi Adam)
+-- Branch 1 (Ayiduase): 1 Manager, 1 Cashier, 4 Waitresses, 4 Chefs (IDs 2..11)
+-- Branch 2 (Sawaba):   1 Manager, 1 Cashier, 4 Waitresses, 4 Chefs (IDs 12..21)
+-- Branch 3 (Dechemso): 1 Manager, 1 Cashier, 4 Waitresses, 4 Chefs (IDs 22..31)
 INSERT INTO `staff` (`id`, `branch_id`, `employee_code`, `full_name`, `role`, `pin_code`, `email`, `phone`, `avatar_color`, `hourly_rate`, `commission_rate`, `is_active`) VALUES
-(1, 1, 'EMP-001', 'Elena Rostova', 'Admin', '1111', 'elena@saffronandslate.com', '+1 (212) 555-1001', '#f59e0b', 38.00, 3.00, 1),
-(2, 1, 'EMP-002', 'Julian Sterling', 'Cashier', '2222', 'julian@saffronandslate.com', '+1 (212) 555-1002', '#10b981', 22.00, 2.50, 1),
-(3, 1, 'EMP-003', 'Amara Okafor', 'Waiter', '3333', 'amara@saffronandslate.com', '+1 (212) 555-1003', '#6366f1', 19.50, 4.00, 1),
-(4, 1, 'EMP-004', 'Kenji Takahashi', 'Chef', '4444', 'kenji@saffronandslate.com', '+1 (212) 555-1004', '#ef4444', 34.00, 1.50, 1),
-(5, 2, 'EMP-005', 'Marcus Vance', 'Manager', '5555', 'marcus@saffronandslate.com', '+1 (718) 555-2001', '#8b5cf6', 35.00, 3.00, 1),
-(6, 2, 'EMP-006', 'Sofia Rossi', 'Waiter', '6666', 'sofia@saffronandslate.com', '+1 (718) 555-2002', '#ec4899', 20.00, 4.00, 1),
-(7, 3, 'EMP-007', 'Mateo Silva', 'Manager', '7777', 'mateo@saffronandslate.com', '+1 (305) 555-3001', '#14b8a6', 34.00, 3.00, 1);
+(1, 1, 'EMP-001', 'Hajia Rabi Adam', 'Admin', '1111', 'hajia.rabi@shakesanddessertgh.com', '+233 24 489 1001', '#f59e0b', 120.00, 3.00, 1),
+
+-- Branch 1: Ayiduase (1 Manager, 1 Cashier, 4 Waitresses, 4 Chefs)
+(2, 1, 'AYI-MGR', 'Alhaji Sulemana Issah', 'Manager', '1001', 'sulemana@shakesanddessertgh.com', '+233 24 401 1001', '#8b5cf6', 65.00, 2.50, 1),
+(3, 1, 'AYI-CSH', 'Nana Ama Mensah', 'Cashier', '2222', 'ama.mensah@shakesanddessertgh.com', '+233 24 401 1002', '#10b981', 42.00, 1.50, 1),
+(4, 1, 'AYI-W01', 'Abena Serwaa Kyei', 'Waiter', '3333', 'abena.kyei@shakesanddessertgh.com', '+233 24 401 1003', '#6366f1', 35.00, 2.00, 1),
+(5, 1, 'AYI-W02', 'Fatima Mohammed', 'Waiter', '3002', 'fatima.m@shakesanddessertgh.com', '+233 24 401 1004', '#ec4899', 35.00, 2.00, 1),
+(6, 1, 'AYI-W03', 'Akosua Pokuaa', 'Waiter', '3003', 'akosua.p@shakesanddessertgh.com', '+233 24 401 1005', '#06b6d4', 35.00, 2.00, 1),
+(7, 1, 'AYI-W04', 'Zainab Alhassan', 'Waiter', '3004', 'zainab.a@shakesanddessertgh.com', '+233 24 401 1006', '#14b8a6', 35.00, 2.00, 1),
+(8, 1, 'AYI-C01', 'Chef Ibrahim Yakubu', 'Chef', '4444', 'ibrahim.y@shakesanddessertgh.com', '+233 24 401 1007', '#ef4444', 55.00, 1.00, 1),
+(9, 1, 'AYI-C02', 'Chef Kofi Boateng', 'Chef', '4002', 'kofi.b@shakesanddessertgh.com', '+233 24 401 1008', '#f97316', 52.00, 1.00, 1),
+(10, 1, 'AYI-C03', 'Chef Halima Sadiq', 'Chef', '4003', 'halima.s@shakesanddessertgh.com', '+233 24 401 1009', '#eab308', 52.00, 1.00, 1),
+(11, 1, 'AYI-C04', 'Chef Yaw Frimpong', 'Chef', '4004', 'yaw.f@shakesanddessertgh.com', '+233 24 401 1010', '#f43f5e', 50.00, 1.00, 1),
+
+-- Branch 2: Sawaba (1 Manager, 1 Cashier, 4 Waitresses, 4 Chefs)
+(12, 2, 'SAW-MGR', 'Mariam Abdul-Rahman', 'Manager', '5555', 'mariam@shakesanddessertgh.com', '+233 24 402 2001', '#8b5cf6', 65.00, 2.50, 1),
+(13, 2, 'SAW-CSH', 'Rahinatu Fuseini', 'Cashier', '2002', 'rahinatu@shakesanddessertgh.com', '+233 24 402 2002', '#10b981', 42.00, 1.50, 1),
+(14, 2, 'SAW-W01', 'Maimuna Seidu', 'Waiter', '6666', 'maimuna@shakesanddessertgh.com', '+233 24 402 2003', '#6366f1', 35.00, 2.00, 1),
+(15, 2, 'SAW-W02', 'Adwoa Bempong', 'Waiter', '6002', 'adwoa.b@shakesanddessertgh.com', '+233 24 402 2004', '#ec4899', 35.00, 2.00, 1),
+(16, 2, 'SAW-W03', 'Safia Haruna', 'Waiter', '6003', 'safia.h@shakesanddessertgh.com', '+233 24 402 2005', '#06b6d4', 35.00, 2.00, 1),
+(17, 2, 'SAW-W04', 'Afia Nyarko', 'Waiter', '6004', 'afia.n@shakesanddessertgh.com', '+233 24 402 2006', '#14b8a6', 35.00, 2.00, 1),
+(18, 2, 'SAW-C01', 'Chef Musah Dauda', 'Chef', '4011', 'musah.d@shakesanddessertgh.com', '+233 24 402 2007', '#ef4444', 55.00, 1.00, 1),
+(19, 2, 'SAW-C02', 'Chef Latifa Zakari', 'Chef', '4012', 'latifa.z@shakesanddessertgh.com', '+233 24 402 2008', '#f97316', 52.00, 1.00, 1),
+(20, 2, 'SAW-C03', 'Chef Kwaku Asante', 'Chef', '4013', 'kwaku.a@shakesanddessertgh.com', '+233 24 402 2009', '#eab308', 52.00, 1.00, 1),
+(21, 2, 'SAW-C04', 'Chef Rukaya Bello', 'Chef', '4014', 'rukaya.b@shakesanddessertgh.com', '+233 24 402 2010', '#f43f5e', 50.00, 1.00, 1),
+
+-- Branch 3: Dechemso (1 Manager, 1 Cashier, 4 Waitresses, 4 Chefs)
+(22, 3, 'DEC-MGR', 'Kwame Osei Bonsu', 'Manager', '7777', 'kwame.bonsu@shakesanddessertgh.com', '+233 24 403 3001', '#8b5cf6', 65.00, 2.50, 1),
+(23, 3, 'DEC-CSH', 'Gifty Acheampong', 'Cashier', '2003', 'gifty.a@shakesanddessertgh.com', '+233 24 403 3002', '#10b981', 42.00, 1.50, 1),
+(24, 3, 'DEC-W01', 'Esi Mansa Owusu', 'Waiter', '8888', 'esi.owusu@shakesanddessertgh.com', '+233 24 403 3003', '#6366f1', 35.00, 2.00, 1),
+(25, 3, 'DEC-W02', 'Samira Iddrisu', 'Waiter', '8002', 'samira.i@shakesanddessertgh.com', '+233 24 403 3004', '#ec4899', 35.00, 2.00, 1),
+(26, 3, 'DEC-W03', 'Maame Yaa Sarpong', 'Waiter', '8003', 'maame.y@shakesanddessertgh.com', '+233 24 403 3005', '#06b6d4', 35.00, 2.00, 1),
+(27, 3, 'DEC-W04', 'Khadija Osman', 'Waiter', '8004', 'khadija.o@shakesanddessertgh.com', '+233 24 403 3006', '#14b8a6', 35.00, 2.00, 1),
+(28, 3, 'DEC-C01', 'Chef Kojo Antwi-Boasiako', 'Chef', '4021', 'kojo.a@shakesanddessertgh.com', '+233 24 403 3007', '#ef4444', 55.00, 1.00, 1),
+(29, 3, 'DEC-C02', 'Chef Amina Gariba', 'Chef', '4022', 'amina.g@shakesanddessertgh.com', '+233 24 403 3008', '#f97316', 52.00, 1.00, 1),
+(30, 3, 'DEC-C03', 'Chef Nana Yaw Opoku', 'Chef', '4023', 'nanayaw@shakesanddessertgh.com', '+233 24 403 3009', '#eab308', 52.00, 1.00, 1),
+(31, 3, 'DEC-C04', 'Chef Habiba Salifu', 'Chef', '4024', 'habiba.s@shakesanddessertgh.com', '+233 24 403 3010', '#f43f5e', 50.00, 1.00, 1);
 
 INSERT INTO `categories` (`id`, `name`, `slug`, `icon`, `color`, `sort_order`) VALUES
-(1, 'Small Plates & Tapas', 'small-plates', 'fa-cheese', '#f59e0b', 1),
-(2, 'Wood-Fired Mains', 'wood-fired-mains', 'fa-fire-burner', '#ef4444', 2),
-(3, 'Artisan Pasta & Risotto', 'artisan-pasta', 'fa-bowl-food', '#eab308', 3),
-(4, 'Handcrafted Burgers & Grill', 'burgers-grill', 'fa-burger', '#f97316', 4),
-(5, 'Signature Cocktails & Drinks', 'drinks-cocktails', 'fa-martini-glass-citrus', '#06b6d4', 5),
-(6, 'Patisserie & Desserts', 'desserts', 'fa-ice-cream', '#ec4899', 6);
+(1, 'Signature Freakshakes & Milkshakes', 'signature-milkshakes', 'fa-blender', '#ec4899', 1),
+(2, 'Belgian Waffles, Crepes & Sundaes', 'waffles-sundaes', 'fa-ice-cream', '#f59e0b', 2),
+(3, 'Artisanal Cakes & CelebrationPlatters', 'cakes-platters', 'fa-cake-candles', '#8b5cf6', 3),
+(4, 'Kumasi Grill, Burgers & Shawarma', 'kumasi-grill-shawarma', 'fa-burger', '#ef4444', 4),
+(5, 'Boba Tea, Smoothies & Sobolo', 'boba-smoothies', 'fa-mug-hot', '#06b6d4', 5),
+(6, 'VIP Party & Corporate Dessert Boxes', 'vip-party-boxes', 'fa-box-open', '#10b981', 6);
 
 INSERT INTO `menu_items` (`id`, `category_id`, `sku`, `name`, `description`, `price`, `cost`, `course_type`, `prep_time_mins`, `calories`, `stock_qty`, `low_stock_threshold`, `modifiers_json`, `image_emoji`, `is_popular`, `is_available`) VALUES
-(1, 1, 'TAP-101', 'Truffle Burrata & Charred Fig', 'Creamy Pugliese burrata, black winter truffle honey, sourdough points', 18.50, 5.80, 'Starter', 7, 420, 42, 10, '["Gluten-Free Bread", "Extra Truffle Honey (+$3)", "No Nuts"]', '🧀', 1, 1),
-(2, 1, 'TAP-102', 'Crispy Calamari & Yuzu Aioli', 'Tempura baby squid, blistered shishito peppers, citrus yuzu dip', 16.00, 4.50, 'Starter', 8, 510, 55, 12, '["Extra Spicy", "Aioli on Side", "No Shishito"]', '🦑', 1, 1),
-(3, 1, 'TAP-103', 'Wagyu Beef Carpaccio', 'A5 Miyazaki sear, caper berries, 36-month Parmigiano, smoked sea salt', 24.00, 8.20, 'Starter', 6, 340, 28, 8, '["No Capers", "Extra Parmesan"]', '🥩', 0, 1),
-(4, 2, 'WFM-201', 'Dry-Aged Prime Ribeye (14oz)', '45-day dry-aged prime ribeye, bone marrow herb butter, roasted garlic', 54.00, 19.50, 'Main', 18, 980, 24, 8, '["Rare", "Medium Rare", "Medium", "Well Done", "Peppercorn Sauce (+$4)"]', '🥩', 1, 1),
-(5, 2, 'WFM-202', 'Miso-Glazed Black Cod', 'Wild Alaskan sablefish, sweet Saikyo miso, charred baby bok choy', 38.00, 13.20, 'Main', 15, 620, 19, 8, '["Extra Glaze", "Steamed Jasmine Rice (+$3)"]', '🐟', 1, 1),
-(6, 2, 'WFM-203', 'Herb-Crusted Rack of Lamb', 'Pasture-raised lamb, pistachio mint crust, pomegranate jus, parsnip puree', 46.00, 16.00, 'Main', 20, 840, 12, 15, '["Medium Rare", "Medium", "No Pistachio Crust"]', '🍖', 0, 1),
-(7, 3, 'PAS-301', 'Black Truffle Tagliolini', 'Hand-rolled 40-yolk pasta, cultured butter emulsion, shaved Périgord truffle', 32.00, 8.90, 'Main', 12, 740, 36, 10, '["Gluten-Free Pasta (+$2)", "Add Burrata (+$6)"]', '🍝', 1, 1),
-(8, 3, 'PAS-302', 'Saffron & Maine Lobster Risotto', 'Acquerello carnaroli rice, butter-poached lobster tail, Iranian saffron', 42.00, 14.80, 'Main', 16, 790, 22, 8, '["Split in Two Bowls", "Extra Chili Oil"]', '🦞', 1, 1),
-(9, 4, 'BGR-401', 'The Saffron Double Smash Burger', 'Double Wagyu smash patties, aged gruyère, caramelized onion jam, brioche', 23.00, 6.40, 'Main', 10, 890, 64, 15, '["Medium", "Well Done", "Add Smoked Bacon (+$3)", "Truffle Fries Upgrade (+$4)"]', '🍔', 1, 1),
-(10, 4, 'BGR-402', 'Wood-Fired Margherita DOP Pizza', 'San Marzano tomatoes, fior di latte, fresh sweet basil, extra virgin olive oil', 21.00, 4.20, 'Main', 9, 760, 48, 12, '["Add Prosciutto (+$5)", "Hot Honey Drizzle (+$2)", "Well Done Crust"]', '🍕', 0, 1),
-(11, 5, 'DRK-501', 'Smoked Saffron Old Fashioned', 'Small-batch bourbon, saffron-infused demerara, angostura, hickory smoke', 17.00, 3.20, 'Drink', 4, 180, 90, 20, '["Single Sphere Ice", "Neat", "Extra Orange Peel"]', '🥃', 1, 1),
-(12, 5, 'DRK-502', 'Passionfruit & Yuzu Spritz (Zero Proof)', 'House yuzu cordial, fresh passionfruit, artisanal botanical tonic, rosemary', 12.00, 2.10, 'Drink', 3, 110, 85, 20, '["Less Ice", "No Rosemary"]', '🍹', 0, 1),
-(13, 5, 'DRK-503', 'Single-Origin Espresso Martini', 'Cold-brew Ethiopian espresso, vodka, Borghetti liqueur, vanilla bean foam', 16.50, 3.10, 'Drink', 4, 210, 75, 15, '["Decaf Espresso", "Oat Milk Foam"]', '🍸', 1, 1),
-(14, 6, 'DES-601', 'Basque Burnt Cheesecake', 'Caramelized San Sebastián style cheesecake, macerated wild berries', 14.50, 3.40, 'Dessert', 5, 540, 11, 15, '["Birthday Candle", "Extra Berry Compote"]', '🍰', 1, 1),
-(15, 6, 'DES-602', 'Valrhona 70% Molten Lava Cake', 'Warm dark chocolate fondant, Madagascar vanilla bean gelato, hazelnut praline', 15.50, 3.80, 'Dessert', 11, 610, 29, 10, '["No Hazelnut", "Extra Scoop Gelato (+$3)"]', '🍫', 0, 1);
+(1, 1, 'SHK-101', 'Hajia''s Royal Lotus Biscoff Freakshake', 'Creamy Madagascar vanilla gelato blended with Lotus Biscoff spread, whipped cream & crushed speculoos', 95.00, 32.00, 'Dessert', 5, 680, 180, 20, '["Extra Biscoff Drizzle (+GHS 15)", "Oat Milk", "Double Scoop (+GHS 25)"]', '🥤', 1, 1),
+(2, 1, 'SHK-102', 'Nutella Ferrero Rocher Monster Shake', 'Belgian hazelnut chocolate shake topped with Ferrero Rocher, waffle cone & fudge sauce', 110.00, 38.00, 'Dessert', 6, 740, 165, 20, '["Extra Ferrero (+GHS 20)", "Less Ice", "Whipped Cream on Side"]', '🍫', 1, 1),
+(3, 1, 'SHK-103', 'Oreo Cookies & Cream Supreme Shake', 'Double-stuffed Oreo cookies spun with sweet cream ice cream and dark chocolate shards', 85.00, 27.00, 'Dessert', 5, 620, 210, 25, '["Add Brownie Bite (+GHS 20)", "Extra Oreo Crumble (+GHS 10)"]', '🍪', 1, 1),
+(4, 1, 'SHK-104', 'Salted Caramel & Roasted Pistachio Shake', 'Rich Sicilian pistachio paste, sea-salt caramel ribbon & toasted almond praline', 105.00, 36.00, 'Dessert', 6, 650, 140, 20, '["No Nuts", "Extra Caramel"]', '🥜', 0, 1),
+(5, 2, 'WAF-201', 'Belgian Liege Waffle & Gelato Trio', 'Warm pearl-sugar Belgian waffle, 3 scoops artisanal gelato, warm Nutella & fresh strawberries', 135.00, 44.00, 'Dessert', 10, 820, 150, 20, '["Extra Gelato Scoop (+GHS 25)", "Add Banana Slices (+GHS 10)"]', '🧇', 1, 1),
+(6, 2, 'WAF-202', 'Sizzling Brownie Skillet Sundae', 'Hot Valrhona fudge brownie on cast iron, vanilla bean ice cream & molten chocolate pour', 125.00, 40.00, 'Dessert', 9, 790, 130, 15, '["Extra Hot Fudge (+GHS 15)", "Add Roasted Pecans (+GHS 15)"]', '🍨', 1, 1),
+(7, 2, 'WAF-203', 'Kunafa Pistachio Chocolate Crepe (Dubai Style)', 'Crispy kataifi pistachio filling wrapped in French crepe with milk chocolate ganache', 145.00, 48.00, 'Dessert', 11, 840, 120, 15, '["Extra Pistachio Cream (+GHS 25)", "Add Vanilla Ice Cream (+GHS 20)"]', '🥞', 1, 1),
+(8, 3, 'CAK-301', 'San Sebastián Burnt Basque Cheesecake', 'Creamy caramelized cheesecake slice served with warm Belgian milk chocolate dip', 115.00, 36.00, 'Dessert', 4, 590, 95, 15, '["White Chocolate Dip", "Dark Chocolate Dip", "Berry Compote (+GHS 15)"]', '🍰', 1, 1),
+(9, 3, 'CAK-302', 'Red Velvet & Cream CheeseTres Leches', 'Soaked sponge cake layered with mascarpone chantilly and ruby velvet crumbs', 95.00, 30.00, 'Dessert', 4, 560, 110, 15, '["Birthday Candle", "Extra Tres Leches Milk"]', '🧁', 0, 1),
+(10, 4, 'GRL-401', 'Ayiduase Loaded Double Beef Smash Burger & Fries', 'Double spiced Ghanaian beef patties, cheddar, caramelized onions, suya mayo & peri-peri fries', 140.00, 52.00, 'Main', 12, 920, 175, 20, '["Extra Patty (+GHS 35)", "Spicy Shito Dip (+GHS 10)", "Cheese Fries (+GHS 20)"]', '🍔', 1, 1),
+(11, 4, 'GRL-402', 'Kumasi Spicy Chicken & Cheese Shawarma Platter', 'Char-grilled marinated chicken shawarma, garlic toum, mozzarella, fries & coleslaw', 115.00, 42.00, 'Main', 10, 780, 220, 25, '["Double Meat (+GHS 30)", "ExtraSpicy", "Extra Garlic Sauce"]', '🌯', 1, 1),
+(12, 4, 'GRL-403', 'Honey-Suya Glazed Crispy Chicken Wings (10pcs)', 'Crispy jumbo wings tossed in Northern suya spice & wildflower honey glaze', 130.00, 46.00, 'Starter', 12, 740, 160, 20, '["Extra Suya Spice", "Ranch Dip", "Loaded Fries Side (+GHS 35)"]', '🍗', 1, 1),
+(13, 5, 'BOB-501', 'Brown Sugar Tiger Milk Boba Tea', 'Caramelized Okinawa brown sugar pearls, fresh jersey milk & cheese foam crown', 75.00, 22.00, 'Drink', 4, 410, 250, 30, '["Extra Boba Pearls (+GHS 12)", "50% Sweetness", "Less Ice"]', '🧋', 1, 1),
+(14, 5, 'BOB-502', 'Tropical Mango, Passion & Hibiscus Sobolo Cooler', 'Chilled spiced hibiscus sobolo layered with fresh mango & passionfruit puree', 65.00, 18.00, 'Drink', 4, 240, 260, 30, '["Add Chia Seeds (+GHS 10)", "Less Ginger"]', '🍹', 0, 1),
+(15, 6, 'BOX-601', 'Hajia''s Grand Family & Fiesta Dessert Platter', '4 Signature Shakes, 2 Belgian Waffles, 12 Mini Pancakes, Brownie Bites, Shawarma & Dipping Pots', 580.00, 195.00, 'Dessert', 16, 3200, 85, 10, '["Assorted Shake Flavors", "Birthday Sparkler", "Extra Nutella Pot (+GHS 30)"]', '🎁', 1, 1);
 
 INSERT INTO `restaurant_tables` (`id`, `branch_id`, `table_number`, `zone`, `capacity`, `status`, `current_guests`, `assigned_staff_id`) VALUES
-(1, 1, 'T-01', 'Main Hall', 2, 'Occupied', 2, 3),
-(2, 1, 'T-02', 'Main Hall', 4, 'Available', 0, NULL),
-(3, 1, 'T-03', 'Main Hall', 4, 'Occupied', 4, 3),
-(4, 1, 'T-04', 'Main Hall', 6, 'Reserved', 5, 2),
-(5, 1, 'T-05', 'Patio Terrace', 2, 'Available', 0, NULL),
-(6, 1, 'T-06', 'Patio Terrace', 4, 'Occupied', 3, 3),
-(7, 1, 'T-07', 'Patio Terrace', 6, 'Needs Cleaning', 0, NULL),
-(8, 1, 'VIP-1', 'VIP Lounge', 8, 'Occupied', 6, 1),
-(9, 1, 'VIP-2', 'VIP Lounge', 10, 'Available', 0, NULL),
-(10, 1, 'BAR-1', 'Bar Counter', 2, 'Available', 0, NULL),
-(11, 2, 'W-01', 'Main Hall', 4, 'Occupied', 4, 6),
-(12, 2, 'W-02', 'Patio Terrace', 6, 'Available', 0, NULL),
-(13, 3, 'M-01', 'Patio Terrace', 4, 'Available', 0, NULL);
+(1, 1, 'AYI-T1', 'Main Hall', 4, 'Occupied', 3, 4),
+(2, 1, 'AYI-T2', 'Main Hall', 4, 'Available', 0, NULL),
+(3, 1, 'AYI-T3', 'Main Hall', 6, 'Occupied', 5, 5),
+(4, 1, 'AYI-T4', 'Patio Terrace', 4, 'Available', 0, NULL),
+(5, 1, 'AYI-T5', 'Patio Terrace', 6, 'Reserved', 4, 6),
+(6, 1, 'AYI-VIP1', 'VIP Lounge', 8, 'Occupied', 6, 4),
+(7, 1, 'AYI-VIP2', 'VIP Lounge', 10, 'Available', 0, NULL),
+(8, 1, 'AYI-BAR1', 'Bar Counter', 2, 'Available', 0, NULL),
+(9, 2, 'SAW-T1', 'Main Hall', 4, 'Occupied', 4, 14),
+(10, 2, 'SAW-T2', 'Main Hall', 4, 'Available', 0, NULL),
+(11, 2, 'SAW-T3', 'Patio Terrace', 6, 'Occupied', 5, 15),
+(12, 2, 'SAW-VIP1', 'VIP Lounge', 8, 'Available', 0, NULL),
+(13, 3, 'DEC-T1', 'Main Hall', 4, 'Occupied', 3, 24),
+(14, 3, 'DEC-T2', 'Patio Terrace', 6, 'Available', 0, NULL),
+(15, 3, 'DEC-VIP1', 'VIP Lounge', 8, 'Occupied', 6, 25);
 
 INSERT INTO `shifts` (`id`, `branch_id`, `staff_id`, `opening_cash`, `closing_cash`, `status`, `notes`) VALUES
-(1, 1, 2, 350.00, NULL, 'Open', 'Evening dinner service drawer - SoHo Flagship'),
-(2, 2, 5, 300.00, NULL, 'Open', 'Williamsburg evening shift');
-
-INSERT INTO `orders` (`id`, `order_number`, `branch_id`, `table_id`, `staff_id`, `customer_name`, `guests_count`, `order_type`, `status`, `payment_status`, `payment_method`, `subtotal`, `tax_amount`, `service_charge`, `discount_amount`, `tip_amount`, `total_amount`, `amount_tendered`, `notes`, `created_at`, `completed_at`) VALUES
-(1, 'ORD-1001', 1, 1, 3, 'Table T-01 (Clara & Liam)', 2, 'Dine-In', 'Preparing', 'Unpaid', 'Card', 90.50, 7.47, 4.53, 0.00, 0.00, 102.50, 0.00, 'Anniversary couple - bring complimentary prosecco splash', DATE_SUB(NOW(), INTERVAL 18 MINUTE), NULL),
-(2, 'ORD-1002', 1, 3, 3, 'Table T-03 (Henderson Party)', 4, 'Dine-In', 'Ready', 'Paid', 'Card', 143.00, 11.80, 7.15, 0.00, 25.00, 186.95, 186.95, 'Allergies: 1 guest no nuts', DATE_SUB(NOW(), INTERVAL 29 MINUTE), NULL),
-(3, 'ORD-1003', 1, 8, 1, 'VIP-1 (Apex Ventures Dinner)', 6, 'Dine-In', 'Preparing', 'Paid', 'Card', 246.50, 20.34, 12.33, 15.00, 45.00, 309.17, 309.17, 'VIP Corporate Account - Course 1 & 2 together', DATE_SUB(NOW(), INTERVAL 11 MINUTE), NULL),
-(4, 'ORD-1004', 1, NULL, 2, 'Maya Lin (Takeaway)', 1, 'Takeaway', 'Completed', 'Paid', 'QR Pay', 55.00, 4.54, 0.00, 0.00, 5.00, 64.54, 64.54, 'Extra napkins and chili oil', DATE_SUB(NOW(), INTERVAL 95 MINUTE), DATE_SUB(NOW(), INTERVAL 75 MINUTE)),
-(5, 'ORD-1005', 2, 11, 6, 'Table W-01 (Rivera Group)', 4, 'Dine-In', 'Completed', 'Paid', 'Cash', 112.50, 9.99, 5.63, 0.00, 18.00, 146.12, 160.00, '', DATE_SUB(NOW(), INTERVAL 140 MINUTE), DATE_SUB(NOW(), INTERVAL 100 MINUTE)),
-(6, 'ORD-1006', 1, 6, 3, 'Table T-06 (Patio Guests)', 3, 'Dine-In', 'Completed', 'Paid', 'Card', 88.50, 7.30, 4.43, 0.00, 15.00, 115.23, 115.23, '', DATE_SUB(NOW(), INTERVAL 210 MINUTE), DATE_SUB(NOW(), INTERVAL 170 MINUTE)),
-(7, 'ORD-1007', 1, 2, 3, 'Sterling Architecture Lunch', 4, 'Dine-In', 'Completed', 'Paid', 'Card', 164.00, 13.53, 8.20, 0.00, 28.00, 213.73, 213.73, '', DATE_SUB(NOW(), INTERVAL 1420 MINUTE), DATE_SUB(NOW(), INTERVAL 1380 MINUTE)),
-(8, 'ORD-1008', 2, 12, 5, 'Brooklyn Creative Studio', 5, 'Dine-In', 'Completed', 'Paid', 'Split', 210.00, 18.65, 10.50, 10.00, 35.00, 264.15, 264.15, 'Split 5 ways', DATE_SUB(NOW(), INTERVAL 1560 MINUTE), DATE_SUB(NOW(), INTERVAL 1510 MINUTE)),
-(9, 'ORD-1009', 3, 13, 7, 'Wynwood Art Collectors', 4, 'Dine-In', 'Completed', 'Paid', 'Card', 184.00, 12.88, 9.20, 0.00, 32.00, 238.08, 238.08, '', DATE_SUB(NOW(), INTERVAL 2880 MINUTE), DATE_SUB(NOW(), INTERVAL 2830 MINUTE)),
-(10, 'ORD-1010', 1, NULL, 2, 'DoorDash / Courier #819', 2, 'Delivery', 'Completed', 'Paid', 'QR Pay', 77.00, 6.35, 0.00, 0.00, 8.00, 91.35, 91.35, 'Leave at concierge desk', DATE_SUB(NOW(), INTERVAL 2990 MINUTE), DATE_SUB(NOW(), INTERVAL 2960 MINUTE)),
-(11, 'ORD-1011', 1, 4, 1, 'Mercer Street Wine Society', 6, 'Dine-In', 'Completed', 'Paid', 'Card', 312.00, 25.74, 15.60, 20.00, 60.00, 393.34, 393.34, 'VIP Sommelier pairing', DATE_SUB(NOW(), INTERVAL 4320 MINUTE), DATE_SUB(NOW(), INTERVAL 4260 MINUTE)),
-(12, 'ORD-1012', 2, 11, 6, 'Williamsburg Loft Dinner', 3, 'Dine-In', 'Completed', 'Paid', 'Cash', 129.50, 11.50, 6.48, 0.00, 20.00, 167.48, 180.00, '', DATE_SUB(NOW(), INTERVAL 5760 MINUTE), DATE_SUB(NOW(), INTERVAL 5710 MINUTE)),
-(13, 'ORD-1013', 3, 13, 7, 'Miami Design District Takeout', 2, 'Takeaway', 'Completed', 'Paid', 'QR Pay', 69.00, 4.83, 0.00, 0.00, 10.00, 83.83, 83.83, '', DATE_SUB(NOW(), INTERVAL 7200 MINUTE), DATE_SUB(NOW(), INTERVAL 7160 MINUTE)),
-(14, 'ORD-1014', 1, 8, 3, 'SoHo Fashion Week Gala', 8, 'Dine-In', 'Completed', 'Paid', 'Split', 358.00, 29.54, 17.90, 25.00, 70.00, 450.44, 450.44, '', DATE_SUB(NOW(), INTERVAL 8640 MINUTE), DATE_SUB(NOW(), INTERVAL 8580 MINUTE)),
-(15, 'ORD-1015', 2, NULL, 5, 'Noah & Chloe (Delivery)', 2, 'Delivery', 'Completed', 'Paid', 'Card', 84.00, 7.46, 0.00, 0.00, 12.00, 103.46, 103.46, '', DATE_SUB(NOW(), INTERVAL 11520 MINUTE), DATE_SUB(NOW(), INTERVAL 11480 MINUTE)),
-(16, 'ORD-1016', 1, 3, 2, 'Cancelled Walk-in Test', 2, 'Takeaway', 'Cancelled', 'Refunded', 'Card', 37.00, 3.05, 0.00, 0.00, 0.00, 40.05, 40.05, 'Guest changed mind before prep', DATE_SUB(NOW(), INTERVAL 4200 MINUTE), NULL);
-
-INSERT INTO `order_items` (`order_id`, `menu_item_id`, `item_name`, `unit_price`, `unit_cost`, `quantity`, `modifiers`, `line_total`, `kitchen_status`) VALUES
-(1, 1, 'Truffle Burrata & Charred Fig', 18.50, 5.80, 1, 'Extra Truffle Honey (+$3)', 18.50, 'Plated'),
-(1, 5, 'Miso-Glazed Black Cod', 38.00, 13.20, 1, 'Extra Glaze', 38.00, 'Cooking'),
-(1, 11, 'Smoked Saffron Old Fashioned', 17.00, 3.20, 2, 'Single Sphere Ice', 34.00, 'Plated'),
-(2, 4, 'Dry-Aged Prime Ribeye (14oz)', 54.00, 19.50, 1, 'Medium Rare', 54.00, 'Plated'),
-(2, 7, 'Black Truffle Tagliolini', 32.00, 8.90, 1, '', 32.00, 'Plated'),
-(2, 9, 'The Saffron Double Smash Burger', 23.00, 6.40, 1, 'Medium, Add Smoked Bacon (+$3)', 23.00, 'Plated'),
-(2, 11, 'Smoked Saffron Old Fashioned', 17.00, 3.20, 2, '', 34.00, 'Plated'),
-(3, 3, 'Wagyu Beef Carpaccio', 24.00, 8.20, 2, '', 48.00, 'Plated'),
-(3, 4, 'Dry-Aged Prime Ribeye (14oz)', 54.00, 19.50, 2, 'Medium Rare', 108.00, 'Cooking'),
-(3, 8, 'Saffron & Maine Lobster Risotto', 42.00, 14.80, 1, '', 42.00, 'Cooking'),
-(3, 13, 'Single-Origin Espresso Martini', 16.50, 3.10, 3, '', 49.50, 'Queued'),
-(4, 7, 'Black Truffle Tagliolini', 32.00, 8.90, 1, '', 32.00, 'Plated'),
-(4, 9, 'The Saffron Double Smash Burger', 23.00, 6.40, 1, 'Medium', 23.00, 'Plated'),
-(5, 2, 'Crispy Calamari & Yuzu Aioli', 16.00, 4.50, 2, '', 32.00, 'Plated'),
-(5, 6, 'Herb-Crusted Rack of Lamb', 46.00, 16.00, 1, 'Medium Rare', 46.00, 'Plated'),
-(5, 14, 'Basque Burnt Cheesecake', 14.50, 3.40, 1, '', 14.50, 'Plated'),
-(5, 12, 'Passionfruit & Yuzu Spritz (Zero Proof)', 10.00, 2.10, 2, '', 20.00, 'Plated'),
-(6, 1, 'Truffle Burrata & Charred Fig', 18.50, 5.80, 1, '', 18.50, 'Plated'),
-(6, 5, 'Miso-Glazed Black Cod', 38.00, 13.20, 1, '', 38.00, 'Plated'),
-(6, 7, 'Black Truffle Tagliolini', 32.00, 8.90, 1, '', 32.00, 'Plated'),
-(7, 4, 'Dry-Aged Prime Ribeye (14oz)', 54.00, 19.50, 2, 'Medium Rare', 108.00, 'Plated'),
-(7, 1, 'Truffle Burrata & Charred Fig', 18.50, 5.80, 2, '', 37.00, 'Plated'),
-(7, 11, 'Smoked Saffron Old Fashioned', 19.00, 3.20, 1, '', 19.00, 'Plated'),
-(8, 8, 'Saffron & Maine Lobster Risotto', 42.00, 14.80, 3, '', 126.00, 'Plated'),
-(8, 10, 'Wood-Fired Margherita DOP Pizza', 21.00, 4.20, 2, '', 42.00, 'Plated'),
-(8, 13, 'Single-Origin Espresso Martini', 14.00, 3.10, 3, '', 42.00, 'Plated'),
-(9, 4, 'Dry-Aged Prime Ribeye (14oz)', 54.00, 19.50, 2, 'Medium', 108.00, 'Plated'),
-(9, 5, 'Miso-Glazed Black Cod', 38.00, 13.20, 2, '', 76.00, 'Plated'),
-(10, 9, 'The Saffron Double Smash Burger', 23.00, 6.40, 2, '', 46.00, 'Plated'),
-(10, 15, 'Valrhona 70% Molten Lava Cake', 15.50, 3.80, 2, '', 31.00, 'Plated'),
-(11, 4, 'Dry-Aged Prime Ribeye (14oz)', 54.00, 19.50, 4, 'Medium Rare', 216.00, 'Plated'),
-(11, 3, 'Wagyu Beef Carpaccio', 24.00, 8.20, 4, '', 96.00, 'Plated'),
-(12, 6, 'Herb-Crusted Rack of Lamb', 46.00, 16.00, 2, '', 92.00, 'Plated'),
-(12, 1, 'Truffle Burrata & Charred Fig', 18.75, 5.80, 2, '', 37.50, 'Plated'),
-(13, 9, 'The Saffron Double Smash Burger', 23.00, 6.40, 3, '', 69.00, 'Plated'),
-(14, 8, 'Saffron & Maine Lobster Risotto', 42.00, 14.80, 5, '', 210.00, 'Plated'),
-(14, 4, 'Dry-Aged Prime Ribeye (14oz)', 54.00, 19.50, 2, '', 108.00, 'Plated'),
-(14, 14, 'Basque Burnt Cheesecake', 20.00, 3.40, 2, '', 40.00, 'Plated'),
-(15, 8, 'Saffron & Maine Lobster Risotto', 42.00, 14.80, 2, '', 84.00, 'Plated'),
-(16, 1, 'Truffle Burrata & Charred Fig', 18.50, 5.80, 2, '', 37.00, 'Plated');
+(1, 1, 3, 4500.00, NULL, 'Open', 'Ayiduase Flagship - Active Cashier Drawer (Nana Ama)'),
+(2, 2, 13, 3500.00, NULL, 'Open', 'Sawaba Branch - Active Cashier Drawer (Rahinatu)'),
+(3, 3, 23, 3500.00, NULL, 'Open', 'Dechemso Branch - Active Cashier Drawer (Gifty)');
