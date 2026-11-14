@@ -146,8 +146,26 @@ const LiterosApp = (() => {
     // =========================================================================
     async function init() {
         await loadBootstrap();
+        restoreAuthSession();
         setupClock();
         setupKeyboardShortcuts();
+    }
+
+    function restoreAuthSession() {
+        try {
+            const savedId = localStorage.getItem('literos_auth_staff_id');
+            if (savedId) {
+                const found = state.staff.find(s => Number(s.id) === Number(savedId));
+                if (found) {
+                    state.activeStaff = found;
+                    document.getElementById('loginScreenOverlay')?.classList.add('hidden');
+                    renderAll();
+                    return;
+                }
+            }
+        } catch (_) {}
+        // Show login screen if not signed in
+        document.getElementById('loginScreenOverlay')?.classList.remove('hidden');
     }
 
     async function loadBootstrap(branchId = state.activeBranchId) {
@@ -178,15 +196,20 @@ const LiterosApp = (() => {
 
     function renderAll() {
         renderTopBar();
+        renderLoginCredentialsScreen();
         renderPosView();
         renderKdsView();
         renderTablesView();
         renderSalesView();
+        renderReportsFilterOptions();
         renderMenuStudioView();
         renderStaffView();
         renderBranchesView();
         renderCompanyView();
         updateBadgeCounts();
+        if (state.activeTab === 'reports') {
+            loadReportsData();
+        }
     }
 
     // =========================================================================
@@ -243,6 +266,9 @@ const LiterosApp = (() => {
         document.querySelectorAll('.nav-btn').forEach(btn => {
             btn.classList.toggle('active', btn.dataset.tab === tabName);
         });
+        if (tabName === 'reports') {
+            loadReportsData();
+        }
     }
 
     async function switchBranch(branchId) {
@@ -1394,6 +1420,7 @@ const LiterosApp = (() => {
         try {
             const res = await api('verify_pin', { pin_code: pin });
             state.activeStaff = res.staff;
+            try { localStorage.setItem('literos_auth_staff_id', String(res.staff.id)); } catch (_) {}
             document.getElementById('quickPinInput').value = '';
             closeModal('pinModal');
             renderAll();
@@ -1401,6 +1428,136 @@ const LiterosApp = (() => {
         } catch (err) {
             toast(err.message, 'error');
         }
+    }
+
+    // =========================================================================
+    // 6B. FULL LOGIN SCREEN, SEEDED CREDENTIALS DIRECTORY & LOGOUT
+    // =========================================================================
+    function renderLoginCredentialsScreen() {
+        const comp = state.company || {};
+        const logoEl = document.getElementById('loginBrandLogo');
+        const nameEl = document.getElementById('loginBrandName');
+        if (logoEl) logoEl.textContent = comp.logo_text || 'S&S';
+        if (nameEl) nameEl.textContent = comp.name || 'Saffron & Slate Hospitality';
+
+        const listEl = document.getElementById('loginDemoCredentialsList');
+        if (!listEl) return;
+
+        const roleBadges = {
+            Admin: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
+            Manager: 'bg-purple-500/20 text-purple-300 border-purple-500/40',
+            Cashier: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
+            Waiter: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40',
+            Chef: 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+        };
+
+        listEl.innerHTML = state.staff.map(s => `
+            <div onclick="LiterosApp.fillLoginDemoCredential('${escapeHtml(s.email || s.employee_code)}', '${escapeHtml(s.pin_code)}')"
+                 class="p-3.5 rounded-2xl bg-slate-900/90 hover:bg-slate-800/90 border border-white/10 hover:border-amber-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer transition group">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl flex items-center justify-center text-xs font-extrabold text-slate-950 shrink-0 shadow"
+                         style="background:${escapeHtml(s.avatar_color || '#f59e0b')}">
+                        ${escapeHtml(s.full_name.slice(0, 2).toUpperCase())}
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs font-bold text-white group-hover:text-amber-300 transition">${escapeHtml(s.full_name)}</span>
+                            <span class="px-2 py-0.5 rounded-md text-[10px] font-bold border ${roleBadges[s.role] || 'bg-slate-800 text-slate-300'}">
+                                ${escapeHtml(s.role)}
+                            </span>
+                        </div>
+                        <div class="text-[11px] text-slate-400 mt-0.5">
+                            <span class="font-mono-num text-slate-300">${escapeHtml(s.email || s.employee_code)}</span>
+                            • ${escapeHtml(s.branch_code || s.branch_name || 'HQ')}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between sm:justify-end gap-2.5 pt-2 sm:pt-0 border-t sm:border-t-0 border-white/5">
+                    <div class="text-right">
+                        <div class="text-[10px] uppercase tracking-wider text-slate-400">ID / PIN Code</div>
+                        <div class="font-mono-num text-xs font-extrabold text-amber-400">
+                            ${escapeHtml(s.employee_code)} / <span class="px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/30 text-amber-300">${escapeHtml(s.pin_code)}</span>
+                        </div>
+                    </div>
+                    <button type="button"
+                            onclick="event.stopPropagation(); LiterosApp.quickLoginAs('${escapeHtml(s.email || s.employee_code)}', '${escapeHtml(s.pin_code)}')"
+                            class="px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs transition shrink-0">
+                        Quick Sign-In
+                    </button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    function fillLoginDemoCredential(identifier, pin) {
+        const idInput = document.getElementById('loginIdentifierInput');
+        const pinInput = document.getElementById('loginPinInput');
+        if (idInput) idInput.value = identifier;
+        if (pinInput) pinInput.value = pin;
+        toast(`Filled credentials for ${identifier} (PIN: ${pin})`, 'info');
+    }
+
+    function appendLoginPin(digit) {
+        const pinInput = document.getElementById('loginPinInput');
+        if (!pinInput) return;
+        if (pinInput.value.length < 10) {
+            pinInput.value += String(digit);
+        }
+    }
+
+    function clearLoginPin() {
+        const pinInput = document.getElementById('loginPinInput');
+        if (pinInput) pinInput.value = '';
+    }
+
+    function backspaceLoginPin() {
+        const pinInput = document.getElementById('loginPinInput');
+        if (pinInput) pinInput.value = pinInput.value.slice(0, -1);
+    }
+
+    async function quickLoginAs(identifier, pin) {
+        fillLoginDemoCredential(identifier, pin);
+        await performLogin(identifier, pin);
+    }
+
+    async function submitLoginScreen(e) {
+        if (e) e.preventDefault();
+        const identifier = document.getElementById('loginIdentifierInput')?.value.trim() || '';
+        const pin = document.getElementById('loginPinInput')?.value.trim() || '';
+        await performLogin(identifier, pin);
+    }
+
+    async function performLogin(identifier, pin) {
+        try {
+            const res = await api('login', { identifier, pin_code: pin });
+            state.activeStaff = res.staff;
+            try { localStorage.setItem('literos_auth_staff_id', String(res.staff.id)); } catch (_) {}
+
+            // If staff belongs to a specific branch, switch terminal to their branch
+            if (res.staff.branch_id && Number(res.staff.branch_id) !== Number(state.activeBranchId)) {
+                state.activeBranchId = Number(res.staff.branch_id);
+                await loadBootstrap(state.activeBranchId);
+            } else {
+                renderAll();
+            }
+
+            document.getElementById('loginPinInput').value = '';
+            document.getElementById('loginScreenOverlay')?.classList.add('hidden');
+            toast(res.message, 'success');
+        } catch (err) {
+            toast(err.message, 'error');
+        }
+    }
+
+    function logoutSession() {
+        const prevName = state.activeStaff?.full_name || 'Operator';
+        try { localStorage.removeItem('literos_auth_staff_id'); } catch (_) {}
+        const pinInput = document.getElementById('loginPinInput');
+        if (pinInput) pinInput.value = '';
+        renderLoginCredentialsScreen();
+        document.getElementById('loginScreenOverlay')?.classList.remove('hidden');
+        toast(`${prevName} signed out. Terminal locked.`, 'info');
     }
 
     // =========================================================================
@@ -1573,6 +1730,448 @@ const LiterosApp = (() => {
     }
 
     // =========================================================================
+    // 8B. EXECUTIVE REPORTS & BUSINESS INTELLIGENCE SUITE
+    // =========================================================================
+    const reportCharts = {
+        dailyTrend: null,
+        paymentMix: null,
+        orderTypeMix: null,
+        categoryMix: null
+    };
+    let latestReportData = null;
+
+    function renderReportsFilterOptions() {
+        const branchSel = document.getElementById('repBranchSelect');
+        if (branchSel) {
+            const currentVal = branchSel.value || '0';
+            branchSel.innerHTML = `<option value="0">All Branches (Consolidated)</option>` +
+                state.branches.map(b => `<option value="${b.id}">${escapeHtml(b.code)} — ${escapeHtml(b.name)}</option>`).join('');
+            branchSel.value = currentVal;
+        }
+
+        const staffSel = document.getElementById('repStaffSelect');
+        if (staffSel) {
+            const currentStaff = staffSel.value || '0';
+            staffSel.innerHTML = `<option value="0">All Personnel</option>` +
+                state.staff.map(s => `<option value="${s.id}">${escapeHtml(s.full_name)} (${escapeHtml(s.role)})</option>`).join('');
+            staffSel.value = currentStaff;
+        }
+    }
+
+    function setReportDatePreset(preset) {
+        const fromEl = document.getElementById('repFromDate');
+        const toEl = document.getElementById('repToDate');
+        if (!fromEl || !toEl) return;
+
+        const now = new Date();
+        const fmt = (d) => d.toISOString().slice(0, 10);
+
+        if (preset === 'today') {
+            fromEl.value = fmt(now);
+            toEl.value = fmt(now);
+        } else if (preset === '7days') {
+            const past = new Date(now.getTime() - 7 * 86400000);
+            fromEl.value = fmt(past);
+            toEl.value = fmt(now);
+        } else if (preset === '30days') {
+            const past = new Date(now.getTime() - 30 * 86400000);
+            fromEl.value = fmt(past);
+            toEl.value = fmt(now);
+        } else {
+            fromEl.value = '';
+            toEl.value = '';
+        }
+        loadReportsData();
+    }
+
+    function resetReportFilters() {
+        const form = document.getElementById('reportsFilterForm');
+        if (form) form.reset();
+        loadReportsData();
+    }
+
+    async function runReportQuery(e) {
+        if (e) e.preventDefault();
+        await loadReportsData();
+        toast('Report filters applied', 'info');
+    }
+
+    async function loadReportsData() {
+        const params = new URLSearchParams({
+            from_date: document.getElementById('repFromDate')?.value || '',
+            to_date: document.getElementById('repToDate')?.value || '',
+            branch_id: document.getElementById('repBranchSelect')?.value || '0',
+            order_type: document.getElementById('repOrderType')?.value || 'all',
+            payment_method: document.getElementById('repPaymentMethod')?.value || 'all',
+            payment_status: document.getElementById('repPaymentStatus')?.value || 'all',
+            order_status: document.getElementById('repOrderStatus')?.value || 'all',
+            staff_id: document.getElementById('repStaffSelect')?.value || '0',
+            search: document.getElementById('repSearchInput')?.value || ''
+        });
+
+        try {
+            const data = await api('reports_query', null, '&' + params.toString());
+            latestReportData = data;
+            renderReportKpis(data.kpis);
+            renderReportCharts(data);
+            renderReportTables(data);
+        } catch (err) {
+            toast(err.message, 'error');
+        }
+    }
+
+    function renderReportKpis(k) {
+        if (!k) return;
+        document.getElementById('repKpiGrossRevenue').textContent = money(k.gross_revenue);
+        document.getElementById('repKpiPaidSplit').textContent = `Paid: ${money(k.paid_amount)} • Unpaid: ${money(k.unpaid_amount)}`;
+
+        document.getElementById('repKpiNetSales').textContent = money(k.net_subtotal);
+        document.getElementById('repKpiDiscounts').textContent = `Discounts: -${money(k.total_discounts)}`;
+
+        document.getElementById('repKpiGrossProfit').textContent = money(k.gross_profit);
+        document.getElementById('repKpiMarginPct').textContent = `COGS: ${money(k.total_cogs)} (${k.gross_margin_pct}% Margin)`;
+
+        document.getElementById('repKpiTaxService').textContent = money(k.total_tax + k.total_service_charge);
+        document.getElementById('repKpiTaxBreakdown').textContent = `Tax: ${money(k.total_tax)} • Svc: ${money(k.total_service_charge)}`;
+
+        document.getElementById('repKpiTips').textContent = money(k.total_tips);
+        document.getElementById('repKpiGuestsCount').textContent = `${k.total_guests} Guests Served`;
+
+        document.getElementById('repKpiOrdersCount').textContent = `${k.valid_orders} (${k.cancelled_orders} void)`;
+        document.getElementById('repKpiAvgCheck').textContent = `Avg Ticket: ${money(k.avg_order_value)}`;
+    }
+
+    function renderReportCharts(data) {
+        if (typeof Chart === 'undefined') return;
+
+        Chart.defaults.color = '#94a3b8';
+        Chart.defaults.font.family = '"Plus Jakarta Sans", sans-serif';
+
+        // 1. Daily Revenue, Net Sales & Profit Trend Chart
+        const dailyCtx = document.getElementById('repDailyTrendChart')?.getContext('2d');
+        if (dailyCtx) {
+            if (reportCharts.dailyTrend) reportCharts.dailyTrend.destroy();
+            const labels = (data.daily_trend || []).map(d => d.date);
+            const revData = (data.daily_trend || []).map(d => d.gross_revenue);
+            const profitData = (data.daily_trend || []).map(d => d.gross_profit);
+            const cogsData = (data.daily_trend || []).map(d => d.cogs);
+
+            reportCharts.dailyTrend = new Chart(dailyCtx, {
+                type: 'bar',
+                data: {
+                    labels: labels.length ? labels : ['No Data'],
+                    datasets: [
+                        {
+                            label: 'Gross Revenue',
+                            data: revData.length ? revData : [0],
+                            backgroundColor: 'rgba(245, 158, 11, 0.75)',
+                            borderColor: '#f59e0b',
+                            borderWidth: 1,
+                            borderRadius: 6
+                        },
+                        {
+                            label: 'Gross Profit',
+                            data: profitData.length ? profitData : [0],
+                            backgroundColor: 'rgba(16, 185, 129, 0.75)',
+                            borderColor: '#10b981',
+                            borderWidth: 1,
+                            borderRadius: 6
+                        },
+                        {
+                            label: 'Food Cost (COGS)',
+                            data: cogsData.length ? cogsData : [0],
+                            type: 'line',
+                            borderColor: '#f43f5e',
+                            backgroundColor: 'rgba(244, 63, 94, 0.2)',
+                            tension: 0.35,
+                            fill: false
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } }
+                    },
+                    scales: {
+                        x: { grid: { color: 'rgba(255,255,255,0.04)' } },
+                        y: { grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true }
+                    }
+                }
+            });
+        }
+
+        // 2. Payment Method Doughnut Chart
+        const payCtx = document.getElementById('repPaymentChart')?.getContext('2d');
+        if (payCtx) {
+            if (reportCharts.paymentMix) reportCharts.paymentMix.destroy();
+            const pList = data.payment_breakdown || [];
+            reportCharts.paymentMix = new Chart(payCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: pList.map(p => `${p.method} (${p.count})`),
+                    datasets: [{
+                        data: pList.map(p => p.amount),
+                        backgroundColor: ['#f59e0b', '#10b981', '#06b6d4', '#8b5cf6'],
+                        borderColor: '#090b10',
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '64%',
+                    plugins: {
+                        legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } }
+                    }
+                }
+            });
+        }
+
+        // 3. Order Channel Polar/Doughnut Chart
+        const typeCtx = document.getElementById('repOrderTypeChart')?.getContext('2d');
+        if (typeCtx) {
+            if (reportCharts.orderTypeMix) reportCharts.orderTypeMix.destroy();
+            const tList = data.order_type_breakdown || [];
+            reportCharts.orderTypeMix = new Chart(typeCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: tList.map(t => `${t.type} (${t.count} orders)`),
+                    datasets: [{
+                        data: tList.map(t => t.amount),
+                        backgroundColor: ['#f59e0b', '#06b6d4', '#ec4899'],
+                        borderColor: '#090b10',
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '60%',
+                    plugins: {
+                        legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } }
+                    }
+                }
+            });
+        }
+
+        // 4. Category Revenue vs Profit Horizontal Bar Chart
+        const catCtx = document.getElementById('repCategoryChart')?.getContext('2d');
+        if (catCtx) {
+            if (reportCharts.categoryMix) reportCharts.categoryMix.destroy();
+            const cList = data.category_breakdown || [];
+            reportCharts.categoryMix = new Chart(catCtx, {
+                type: 'bar',
+                data: {
+                    labels: cList.length ? cList.map(c => c.category_name) : ['No Categories'],
+                    datasets: [
+                        {
+                            label: 'Category Revenue',
+                            data: cList.length ? cList.map(c => c.revenue) : [0],
+                            backgroundColor: 'rgba(99, 102, 241, 0.8)',
+                            borderRadius: 6
+                        },
+                        {
+                            label: 'Category Net Profit',
+                            data: cList.length ? cList.map(c => c.profit) : [0],
+                            backgroundColor: 'rgba(16, 185, 129, 0.8)',
+                            borderRadius: 6
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } }
+                    },
+                    scales: {
+                        x: { grid: { color: 'rgba(255,255,255,0.04)' } },
+                        y: { grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true }
+                    }
+                }
+            });
+        }
+    }
+
+    function renderReportTables(data) {
+        // 1. Top Selling Dishes Table
+        const itemsBody = document.getElementById('repTopItemsTableBody');
+        if (itemsBody) {
+            const items = data.top_items || [];
+            if (items.length === 0) {
+                itemsBody.innerHTML = `<tr><td colspan="5" class="py-8 text-center text-xs text-slate-500">No item sales in selected range</td></tr>`;
+            } else {
+                itemsBody.innerHTML = items.map(it => {
+                    const marginPct = it.revenue > 0 ? Math.round((it.profit / it.revenue) * 100) : 0;
+                    return `
+                        <tr class="border-b border-white/5 hover:bg-white/[0.02]">
+                            <td class="py-2.5 px-3.5">
+                                <div class="text-xs font-semibold text-white">${escapeHtml(it.item_name)}</div>
+                                <div class="text-[10px] text-slate-400">${escapeHtml(it.category_name)}</div>
+                            </td>
+                            <td class="py-2.5 px-3.5 text-center font-mono-num text-xs font-bold text-amber-300">${it.qty_sold}</td>
+                            <td class="py-2.5 px-3.5 text-right font-mono-num text-xs font-semibold text-white">${money(it.revenue)}</td>
+                            <td class="py-2.5 px-3.5 text-right font-mono-num text-xs text-slate-400">${money(it.cost)}</td>
+                            <td class="py-2.5 px-3.5 text-right font-mono-num text-xs font-bold text-emerald-400">
+                                ${money(it.profit)} <span class="text-[10px] text-slate-400">(${marginPct}%)</span>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+            }
+        }
+
+        // 2. Staff Performance & Commissions Table
+        const staffBody = document.getElementById('repStaffPerformanceBody');
+        if (staffBody) {
+            const staffList = data.staff_performance || [];
+            if (staffList.length === 0) {
+                staffBody.innerHTML = `<tr><td colspan="5" class="py-8 text-center text-xs text-slate-500">No personnel transactions in selected range</td></tr>`;
+            } else {
+                staffBody.innerHTML = staffList.map(st => `
+                    <tr class="border-b border-white/5 hover:bg-white/[0.02]">
+                        <td class="py-2.5 px-3.5">
+                            <div class="text-xs font-semibold text-white">${escapeHtml(st.staff_name)}</div>
+                            <div class="text-[10px] text-amber-400">${escapeHtml(st.role)} • ${st.commission_rate}% comm</div>
+                        </td>
+                        <td class="py-2.5 px-3.5 text-center font-mono-num text-xs font-bold text-white">${st.orders_count}</td>
+                        <td class="py-2.5 px-3.5 text-right font-mono-num text-xs font-bold text-emerald-400">${money(st.gross_sales)}</td>
+                        <td class="py-2.5 px-3.5 text-right font-mono-num text-xs text-indigo-300">${money(st.tips_collected)}</td>
+                        <td class="py-2.5 px-3.5 text-right font-mono-num text-xs font-bold text-amber-300">${money(st.commission_earned)}</td>
+                    </tr>
+                `).join('');
+            }
+        }
+
+        // 3. Detailed Transactions Table + Grand Total Footer
+        const txBody = document.getElementById('repTransactionsTableBody');
+        const txFoot = document.getElementById('repTransactionsTableFoot');
+        const badge = document.getElementById('repTransactionsCountBadge');
+        const txs = data.transactions || [];
+
+        if (badge) {
+            badge.textContent = `${txs.length} matching transaction${txs.length === 1 ? '' : 's'}`;
+        }
+
+        if (txBody) {
+            if (txs.length === 0) {
+                txBody.innerHTML = `<tr><td colspan="14" class="py-12 text-center text-xs text-slate-500">No transactions match your current filter criteria.</td></tr>`;
+            } else {
+                txBody.innerHTML = txs.map(o => {
+                    const isCancelled = o.status === 'Cancelled';
+                    const statusStyle = {
+                        Preparing: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
+                        Ready: 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30',
+                        Completed: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+                        Cancelled: 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+                    }[o.status] || 'bg-slate-800 text-slate-300';
+
+                    const taxAndSvc = Number(o.tax_amount) + Number(o.service_charge);
+
+                    return `
+                        <tr class="border-b border-white/5 hover:bg-white/[0.02] transition ${isCancelled ? 'opacity-50 line-through' : ''}">
+                            <td class="py-3 px-3.5 font-mono-num text-xs font-bold text-amber-400">${escapeHtml(o.order_number)}</td>
+                            <td class="py-3 px-3.5 font-mono-num text-[11px] text-slate-300">${escapeHtml(o.created_at)}</td>
+                            <td class="py-3 px-3.5 text-xs text-slate-300">${escapeHtml(o.branch_code || o.branch_name || '')}</td>
+                            <td class="py-3 px-3.5">
+                                <div class="text-xs font-semibold text-white">${escapeHtml(o.customer_name)}</div>
+                                <div class="text-[10px] text-slate-400">${o.items_count || 0} items ${o.table_number ? `• ${escapeHtml(o.table_number)}` : ''}</div>
+                            </td>
+                            <td class="py-3 px-3.5 text-xs text-slate-300">${escapeHtml(o.order_type)}</td>
+                            <td class="py-3 px-3.5 text-xs text-slate-300">${escapeHtml(o.staff_name || '')}</td>
+                            <td class="py-3 px-3.5 text-xs">
+                                <span class="px-2 py-0.5 rounded bg-slate-900 border border-white/10 text-slate-200 font-semibold">
+                                    ${escapeHtml(o.payment_method)}
+                                </span>
+                                <span class="text-[10px] ml-1 ${o.payment_status === 'Paid' ? 'text-emerald-400' : 'text-rose-400'}">
+                                    (${escapeHtml(o.payment_status)})
+                                </span>
+                            </td>
+                            <td class="py-3 px-3.5">
+                                <span class="px-2 py-0.5 rounded text-[10px] font-bold border ${statusStyle}">
+                                    ${escapeHtml(o.status)}
+                                </span>
+                            </td>
+                            <td class="py-3 px-3.5 text-right font-mono-num text-xs text-slate-200">${money(o.subtotal)}</td>
+                            <td class="py-3 px-3.5 text-right font-mono-num text-xs text-rose-400">-${money(o.discount_amount)}</td>
+                            <td class="py-3 px-3.5 text-right font-mono-num text-xs text-cyan-300">${money(taxAndSvc)}</td>
+                            <td class="py-3 px-3.5 text-right font-mono-num text-xs text-indigo-300">${money(o.tip_amount)}</td>
+                            <td class="py-3 px-3.5 text-right font-mono-num text-xs font-extrabold text-emerald-400">${money(o.total_amount)}</td>
+                            <td class="py-3 px-3.5 text-right">
+                                <button onclick="LiterosApp.viewReceipt(${o.id})"
+                                        class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-amber-500 hover:text-slate-950 text-slate-200 text-xs transition"
+                                        title="View Thermal Receipt">
+                                    <i class="fa-solid fa-receipt"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+            }
+        }
+
+        if (txFoot && data.kpis) {
+            const k = data.kpis;
+            const totalSub = (txs || []).filter(t => t.status !== 'Cancelled').reduce((s, t) => s + Number(t.subtotal), 0);
+            txFoot.innerHTML = `
+                <tr>
+                    <td colspan="8" class="py-3.5 px-3.5 text-right uppercase tracking-wider text-amber-400">
+                        GRAND TOTAL (${k.valid_orders} Valid Orders / ${k.total_guests} Guests):
+                    </td>
+                    <td class="py-3.5 px-3.5 text-right text-slate-200">${money(totalSub)}</td>
+                    <td class="py-3.5 px-3.5 text-right text-rose-400">-${money(k.total_discounts)}</td>
+                    <td class="py-3.5 px-3.5 text-right text-cyan-300">${money(k.total_tax + k.total_service_charge)}</td>
+                    <td class="py-3.5 px-3.5 text-right text-indigo-300">${money(k.total_tips)}</td>
+                    <td class="py-3.5 px-3.5 text-right text-sm text-emerald-400">${money(k.gross_revenue)}</td>
+                    <td></td>
+                </tr>
+            `;
+        }
+    }
+
+    function exportFullReportCsv() {
+        if (!latestReportData || !Array.isArray(latestReportData.transactions)) {
+            toast('Please run the report first', 'warning');
+            return;
+        }
+        const headers = [
+            'Order Number', 'Created At', 'Branch', 'Customer Name', 'Guests',
+            'Channel', 'Personnel', 'Payment Method', 'Payment Status', 'Order Status',
+            'Items Count', 'Subtotal', 'Discount', 'Tax', 'Service Charge', 'Tip', 'COGS', 'Gross Profit', 'Total Amount'
+        ];
+        const rows = latestReportData.transactions.map(o => [
+            o.order_number,
+            o.created_at,
+            `"${(o.branch_name || '').replace(/"/g, '""')}"`,
+            `"${(o.customer_name || '').replace(/"/g, '""')}"`,
+            o.guests_count,
+            o.order_type,
+            `"${(o.staff_name || '').replace(/"/g, '""')}"`,
+            o.payment_method,
+            o.payment_status,
+            o.status,
+            o.items_count || 0,
+            o.subtotal,
+            o.discount_amount,
+            o.tax_amount,
+            o.service_charge,
+            o.tip_amount,
+            o.order_cogs || 0,
+            o.gross_profit || 0,
+            o.total_amount
+        ]);
+        const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `literos_financial_report_${new Date().toISOString().slice(0, 10)}.csv`;
+        link.click();
+        toast('Filtered financial report exported to CSV');
+    }
+
+    // =========================================================================
     // MODALS, CLOCK & KEYBOARD SHORTCUTS
     // =========================================================================
     function openModal(id) {
@@ -1645,11 +2244,23 @@ const LiterosApp = (() => {
         editStaffMember,
         submitStaffForm,
         submitPinSwitch,
+        fillLoginDemoCredential,
+        appendLoginPin,
+        clearLoginPin,
+        backspaceLoginPin,
+        quickLoginAs,
+        submitLoginScreen,
+        logoutSession,
         openNewBranchModal,
         editBranch,
         submitBranchForm,
         submitCompanyProfile,
         resetDemoDatabase,
+        setReportDatePreset,
+        resetReportFilters,
+        runReportQuery,
+        loadReportsData,
+        exportFullReportCsv,
         openModal,
         closeModal,
         setSalesStatusFilter: (st) => { state.salesStatusFilter = st; renderSalesView(); },

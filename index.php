@@ -40,6 +40,9 @@ declare(strict_types=1);
 
     <!-- Custom Obsidian & Saffron Styles -->
     <link rel="stylesheet" href="assets/css/style.css">
+
+    <!-- Chart.js 4 for Interactive Financial & Analytical Charts -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body class="min-h-screen flex flex-col bg-[#090b10] text-slate-100 select-none">
 
@@ -82,8 +85,8 @@ declare(strict_types=1);
             </div>
         </div>
 
-        <!-- Right: Active Operator PIN Switcher & Live Clock -->
-        <div class="flex items-center gap-3">
+        <!-- Right: Active Operator PIN Switcher, Live Clock & Logout -->
+        <div class="flex items-center gap-2.5">
             <button onclick="LiterosApp.openModal('pinModal')"
                     id="activeStaffPill"
                     title="Click to switch operator via POS PIN"
@@ -94,6 +97,13 @@ declare(strict_types=1);
                 <i class="fa-regular fa-clock text-amber-400"></i>
                 <span id="liveClockDisplay">--:--:--</span>
             </div>
+
+            <button onclick="LiterosApp.logoutSession()"
+                    title="Lock POS & Sign Out to Login Screen"
+                    class="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500 text-rose-300 hover:text-slate-950 border border-rose-500/30 text-xs font-extrabold transition">
+                <i class="fa-solid fa-right-from-bracket"></i>
+                <span class="hidden md:inline">Logout</span>
+            </button>
         </div>
     </header>
 
@@ -131,8 +141,17 @@ declare(strict_types=1);
 
                 <button data-tab="sales" onclick="LiterosApp.switchTab('sales')"
                         class="nav-btn w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs font-semibold text-slate-300 hover:text-white border border-transparent">
-                    <i class="fa-solid fa-chart-line text-base w-5 text-center"></i>
+                    <i class="fa-solid fa-receipt text-base w-5 text-center"></i>
                     <span class="hidden lg:inline">Sales & Receipts</span>
+                </button>
+
+                <button data-tab="reports" onclick="LiterosApp.switchTab('reports')"
+                        class="nav-btn w-full flex items-center justify-between px-3.5 py-3 rounded-xl text-xs font-semibold text-slate-300 hover:text-white border border-transparent">
+                    <div class="flex items-center gap-3">
+                        <i class="fa-solid fa-chart-pie text-base w-5 text-center text-amber-400"></i>
+                        <span class="hidden lg:inline">Reports & BI</span>
+                    </div>
+                    <span class="hidden lg:inline px-1.5 py-0.5 text-[9px] font-mono-num font-bold rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">PRO</span>
                 </button>
 
                 <div class="pt-2 pb-1 px-3 hidden lg:block">
@@ -164,14 +183,22 @@ declare(strict_types=1);
                 </button>
             </nav>
 
-            <!-- Bottom Quick Help Card -->
-            <div class="hidden lg:block p-3 rounded-2xl bg-slate-900/90 border border-white/5 text-[11px] text-slate-400 space-y-1.5">
-                <div class="flex items-center justify-between text-slate-200 font-semibold">
-                    <span>Quick Keys</span>
-                    <i class="fa-solid fa-keyboard text-amber-400"></i>
+            <!-- Bottom Quick Help & Logout Card -->
+            <div class="space-y-2">
+                <div class="hidden lg:block p-3 rounded-2xl bg-slate-900/90 border border-white/5 text-[11px] text-slate-400 space-y-1.5">
+                    <div class="flex items-center justify-between text-slate-200 font-semibold">
+                        <span>Quick Keys</span>
+                        <i class="fa-solid fa-keyboard text-amber-400"></i>
+                    </div>
+                    <div>Press <kbd class="px-1.5 py-0.5 rounded bg-slate-800 text-amber-300 font-mono-num">/</kbd> to search menu</div>
+                    <div>Press <kbd class="px-1.5 py-0.5 rounded bg-slate-800 text-amber-300 font-mono-num">Esc</kbd> to close modals</div>
                 </div>
-                <div>Press <kbd class="px-1.5 py-0.5 rounded bg-slate-800 text-amber-300 font-mono-num">/</kbd> to search menu</div>
-                <div>Press <kbd class="px-1.5 py-0.5 rounded bg-slate-800 text-amber-300 font-mono-num">Esc</kbd> to close modals</div>
+
+                <button onclick="LiterosApp.logoutSession()"
+                        class="w-full flex items-center justify-center lg:justify-start gap-3 px-3.5 py-2.5 rounded-xl bg-rose-950/50 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/25 text-xs font-bold transition">
+                    <i class="fa-solid fa-power-off w-5 text-center"></i>
+                    <span class="hidden lg:inline">Lock & Sign Out</span>
+                </button>
             </div>
         </aside>
 
@@ -467,6 +494,350 @@ declare(strict_types=1);
                                 </tr>
                             </thead>
                             <tbody id="salesTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- =============================================================
+                 VIEW 4B: FULL REPORTS & BUSINESS INTELLIGENCE SUITE
+                 ============================================================= -->
+            <section id="view-reports" class="view-section hidden p-6 space-y-6">
+                <!-- Header & Export Actions -->
+                <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                    <div>
+                        <h2 class="text-xl font-bold text-white flex items-center gap-2.5">
+                            <i class="fa-solid fa-chart-pie text-amber-400"></i>
+                            Executive Financial Reports & Business Intelligence
+                        </h2>
+                        <p class="text-xs text-slate-400 mt-0.5">
+                            Filter by date range, branch, order channel, payment method, status, and sales personnel with interactive graphs & audit tables
+                        </p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button onclick="LiterosApp.setReportDatePreset('today')"
+                                class="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-white/10 text-xs font-semibold text-slate-300 hover:text-amber-300 transition">
+                            Today
+                        </button>
+                        <button onclick="LiterosApp.setReportDatePreset('7days')"
+                                class="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-white/10 text-xs font-semibold text-slate-300 hover:text-amber-300 transition">
+                            Last 7 Days
+                        </button>
+                        <button onclick="LiterosApp.setReportDatePreset('30days')"
+                                class="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-white/10 text-xs font-semibold text-slate-300 hover:text-amber-300 transition">
+                            Last 30 Days
+                        </button>
+                        <button onclick="LiterosApp.setReportDatePreset('all')"
+                                class="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-white/10 text-xs font-semibold text-slate-300 hover:text-amber-300 transition">
+                            All Time
+                        </button>
+                        <button onclick="LiterosApp.exportFullReportCsv()"
+                                class="px-4 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500 text-emerald-300 hover:text-slate-950 border border-emerald-500/40 text-xs font-bold flex items-center gap-1.5 transition">
+                            <i class="fa-solid fa-file-csv"></i>Export Filtered CSV
+                        </button>
+                        <button onclick="window.print()"
+                                class="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-extrabold flex items-center gap-1.5 transition">
+                            <i class="fa-solid fa-print"></i>Print Report
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Multi-Dimensional Filter Control Bar -->
+                <form id="reportsFilterForm" onsubmit="LiterosApp.runReportQuery(event)"
+                      class="glass-panel rounded-2xl p-5 border border-white/10 space-y-4">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-3">
+                        <div>
+                            <label class="block text-[11px] font-semibold text-slate-400 mb-1">From Date</label>
+                            <input type="date" id="repFromDate" name="from_date"
+                                   class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-xs text-white font-mono-num outline-none focus:border-amber-500">
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-semibold text-slate-400 mb-1">To Date</label>
+                            <input type="date" id="repToDate" name="to_date"
+                                   class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-xs text-white font-mono-num outline-none focus:border-amber-500">
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-semibold text-slate-400 mb-1">Branch Location</label>
+                            <select id="repBranchSelect" name="branch_id"
+                                    class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-xs text-white outline-none focus:border-amber-500">
+                                <option value="0">All Branches (Consolidated)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-semibold text-slate-400 mb-1">Transaction Channel</label>
+                            <select id="repOrderType" name="order_type"
+                                    class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-xs text-white outline-none focus:border-amber-500">
+                                <option value="all">All Order Channels</option>
+                                <option value="Dine-In">Dine-In</option>
+                                <option value="Takeaway">Takeaway</option>
+                                <option value="Delivery">Delivery</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-semibold text-slate-400 mb-1">Payment Tender</label>
+                            <select id="repPaymentMethod" name="payment_method"
+                                    class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-xs text-white outline-none focus:border-amber-500">
+                                <option value="all">All Payment Methods</option>
+                                <option value="Card">Card</option>
+                                <option value="Cash">Cash</option>
+                                <option value="QR Pay">QR Pay</option>
+                                <option value="Split">Split Bill</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-semibold text-slate-400 mb-1">Payment Status</label>
+                            <select id="repPaymentStatus" name="payment_status"
+                                    class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-xs text-white outline-none focus:border-amber-500">
+                                <option value="all">All Payment Statuses</option>
+                                <option value="Paid">Paid</option>
+                                <option value="Unpaid">Unpaid / Open Tab</option>
+                                <option value="Refunded">Refunded</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-semibold text-slate-400 mb-1">Order Status</label>
+                            <select id="repOrderStatus" name="order_status"
+                                    class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-xs text-white outline-none focus:border-amber-500">
+                                <option value="all">All Order Statuses</option>
+                                <option value="Completed">Completed</option>
+                                <option value="Preparing">Preparing</option>
+                                <option value="Ready">Ready</option>
+                                <option value="Cancelled">Cancelled</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-semibold text-slate-400 mb-1">Sales Personnel</label>
+                            <select id="repStaffSelect" name="staff_id"
+                                    class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-xs text-white outline-none focus:border-amber-500">
+                                <option value="0">All Personnel</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2 border-t border-white/5">
+                        <div class="relative flex-1">
+                            <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                            <input type="text" id="repSearchInput" name="search"
+                                   placeholder="Filter by Order # (e.g. ORD-1008), Customer Name, or Order Notes..."
+                                   class="w-full pl-9 pr-4 py-2 rounded-xl bg-slate-900 border border-white/10 text-xs text-white outline-none focus:border-amber-500">
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button type="button" onclick="LiterosApp.resetReportFilters()"
+                                    class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300">
+                                <i class="fa-solid fa-rotate-left mr-1"></i>Reset Filters
+                            </button>
+                            <button type="submit"
+                                    class="px-6 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs shadow-lg shadow-amber-500/20 flex items-center justify-center gap-1.5">
+                                <i class="fa-solid fa-filter"></i>Apply Report Filters
+                            </button>
+                        </div>
+                    </div>
+                </form>
+
+                <!-- 6 Executive Financial KPI Cards -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+                    <div class="glass-panel rounded-2xl p-4 border border-emerald-500/25">
+                        <div class="flex items-center justify-between text-[11px] text-slate-400">
+                            <span>Gross Revenue</span>
+                            <i class="fa-solid fa-sack-dollar text-emerald-400"></i>
+                        </div>
+                        <div id="repKpiGrossRevenue" class="font-mono-num text-xl font-extrabold text-emerald-400 mt-1">$0.00</div>
+                        <div id="repKpiPaidSplit" class="text-[10px] text-slate-400 mt-1 font-mono-num">Paid: $0.00 • Unpaid: $0.00</div>
+                    </div>
+
+                    <div class="glass-panel rounded-2xl p-4 border border-white/10">
+                        <div class="flex items-center justify-between text-[11px] text-slate-400">
+                            <span>Net Food & Drink Sales</span>
+                            <i class="fa-solid fa-receipt text-amber-400"></i>
+                        </div>
+                        <div id="repKpiNetSales" class="font-mono-num text-xl font-extrabold text-white mt-1">$0.00</div>
+                        <div id="repKpiDiscounts" class="text-[10px] text-rose-400 mt-1 font-mono-num">Discounts: -$0.00</div>
+                    </div>
+
+                    <div class="glass-panel rounded-2xl p-4 border border-amber-500/25">
+                        <div class="flex items-center justify-between text-[11px] text-slate-400">
+                            <span>Gross Profit (After COGS)</span>
+                            <i class="fa-solid fa-chart-line text-amber-400"></i>
+                        </div>
+                        <div id="repKpiGrossProfit" class="font-mono-num text-xl font-extrabold text-amber-400 mt-1">$0.00</div>
+                        <div id="repKpiMarginPct" class="text-[10px] text-emerald-300 mt-1 font-mono-num">COGS: $0.00 (0% Margin)</div>
+                    </div>
+
+                    <div class="glass-panel rounded-2xl p-4 border border-white/10">
+                        <div class="flex items-center justify-between text-[11px] text-slate-400">
+                            <span>Tax & Service Charges</span>
+                            <i class="fa-solid fa-scale-balanced text-cyan-400"></i>
+                        </div>
+                        <div id="repKpiTaxService" class="font-mono-num text-xl font-extrabold text-cyan-300 mt-1">$0.00</div>
+                        <div id="repKpiTaxBreakdown" class="text-[10px] text-slate-400 mt-1 font-mono-num">Tax: $0.00 • Svc: $0.00</div>
+                    </div>
+
+                    <div class="glass-panel rounded-2xl p-4 border border-white/10">
+                        <div class="flex items-center justify-between text-[11px] text-slate-400">
+                            <span>Tips & Gratuity</span>
+                            <i class="fa-solid fa-hand-holding-dollar text-indigo-400"></i>
+                        </div>
+                        <div id="repKpiTips" class="font-mono-num text-xl font-extrabold text-indigo-300 mt-1">$0.00</div>
+                        <div id="repKpiGuestsCount" class="text-[10px] text-slate-400 mt-1 font-mono-num">0 Guests Served</div>
+                    </div>
+
+                    <div class="glass-panel rounded-2xl p-4 border border-white/10">
+                        <div class="flex items-center justify-between text-[11px] text-slate-400">
+                            <span>Orders & Avg Check</span>
+                            <i class="fa-solid fa-basket-shopping text-rose-400"></i>
+                        </div>
+                        <div id="repKpiOrdersCount" class="font-mono-num text-xl font-extrabold text-white mt-1">0</div>
+                        <div id="repKpiAvgCheck" class="text-[10px] text-amber-300 mt-1 font-mono-num">Avg Ticket: $0.00</div>
+                    </div>
+                </div>
+
+                <!-- Interactive Visual Charts Grid (4 Charts) -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                    <!-- Chart 1: Daily Revenue, Net Sales & Profit Trend -->
+                    <div class="lg:col-span-2 glass-panel rounded-2xl p-5 border border-white/10">
+                        <div class="flex items-center justify-between mb-3">
+                            <div>
+                                <h3 class="text-sm font-bold text-white">Daily Revenue, Net Sales & Gross Profit Timeline</h3>
+                                <p class="text-[11px] text-slate-400">Tracks daily total collections vs. net profit across selected dates</p>
+                            </div>
+                            <span class="px-2.5 py-1 rounded-lg bg-amber-500/15 text-amber-300 text-[10px] font-mono-num font-bold">TIME-SERIES</span>
+                        </div>
+                        <div class="h-64 relative">
+                            <canvas id="repDailyTrendChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Chart 2: Payment Method Tender Mix -->
+                    <div class="glass-panel rounded-2xl p-5 border border-white/10">
+                        <div class="flex items-center justify-between mb-3">
+                            <div>
+                                <h3 class="text-sm font-bold text-white">Payment Tender Distribution</h3>
+                                <p class="text-[11px] text-slate-400">Revenue split by Card, Cash, QR Pay & Split</p>
+                            </div>
+                            <span class="px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-300 text-[10px] font-mono-num font-bold">TENDER</span>
+                        </div>
+                        <div class="h-64 relative flex items-center justify-center">
+                            <canvas id="repPaymentChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Chart 3: Order Channel Mix (Dine-In vs Takeaway vs Delivery) -->
+                    <div class="glass-panel rounded-2xl p-5 border border-white/10">
+                        <div class="flex items-center justify-between mb-3">
+                            <div>
+                                <h3 class="text-sm font-bold text-white">Transaction Type / Channel Mix</h3>
+                                <p class="text-[11px] text-slate-400">Dine-In vs. Takeaway vs. Delivery revenue</p>
+                            </div>
+                            <span class="px-2.5 py-1 rounded-lg bg-cyan-500/15 text-cyan-300 text-[10px] font-mono-num font-bold">CHANNELS</span>
+                        </div>
+                        <div class="h-60 relative flex items-center justify-center">
+                            <canvas id="repOrderTypeChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Chart 4: Category & Hourly Sales Velocity -->
+                    <div class="lg:col-span-2 glass-panel rounded-2xl p-5 border border-white/10">
+                        <div class="flex items-center justify-between mb-3">
+                            <div>
+                                <h3 class="text-sm font-bold text-white">Category Revenue & Profit Contribution</h3>
+                                <p class="text-[11px] text-slate-400">Compares gross revenue and net profit generated per culinary category</p>
+                            </div>
+                            <span class="px-2.5 py-1 rounded-lg bg-indigo-500/15 text-indigo-300 text-[10px] font-mono-num font-bold">MENU MIX</span>
+                        </div>
+                        <div class="h-60 relative">
+                            <canvas id="repCategoryChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Analytical Breakdown Tables (Top Dishes + Staff Commissions + Branch Comparison) -->
+                <div class="grid grid-cols-1 xl:grid-cols-2 gap-5">
+                    <!-- Top Selling Dishes Table -->
+                    <div class="glass-panel rounded-2xl border border-white/10 overflow-hidden">
+                        <div class="p-4 border-b border-white/10 flex items-center justify-between">
+                            <div>
+                                <h3 class="text-sm font-bold text-white"><i class="fa-solid fa-ranking-star text-amber-400 mr-1.5"></i>Item-Level Sales & Profit Margin Breakdown</h3>
+                                <p class="text-[11px] text-slate-400">Ranked by revenue generated within the filtered date window</p>
+                            </div>
+                        </div>
+                        <div class="overflow-x-auto max-h-80">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="border-b border-white/10 text-[10px] uppercase tracking-wider text-slate-400 bg-slate-950/70 sticky top-0">
+                                        <th class="py-2.5 px-3.5">Dish Name</th>
+                                        <th class="py-2.5 px-3.5 text-center">Qty Sold</th>
+                                        <th class="py-2.5 px-3.5 text-right">Revenue</th>
+                                        <th class="py-2.5 px-3.5 text-right">COGS Cost</th>
+                                        <th class="py-2.5 px-3.5 text-right">Net Profit</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="repTopItemsTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Staff Sales & Commission Performance Table -->
+                    <div class="glass-panel rounded-2xl border border-white/10 overflow-hidden">
+                        <div class="p-4 border-b border-white/10 flex items-center justify-between">
+                            <div>
+                                <h3 class="text-sm font-bold text-white"><i class="fa-solid fa-user-check text-emerald-400 mr-1.5"></i>Sales Personnel & Commission Audit</h3>
+                                <p class="text-[11px] text-slate-400">Server order volume, tips collected, and commission payout for period</p>
+                            </div>
+                        </div>
+                        <div class="overflow-x-auto max-h-80">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="border-b border-white/10 text-[10px] uppercase tracking-wider text-slate-400 bg-slate-950/70 sticky top-0">
+                                        <th class="py-2.5 px-3.5">Personnel</th>
+                                        <th class="py-2.5 px-3.5 text-center">Orders</th>
+                                        <th class="py-2.5 px-3.5 text-right">Gross Sales</th>
+                                        <th class="py-2.5 px-3.5 text-right">Tips</th>
+                                        <th class="py-2.5 px-3.5 text-right">Commission</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="repStaffPerformanceBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Master Filtered Transactions & Line-Item Audit Table (With Footer Totals Row) -->
+                <div class="glass-panel rounded-2xl border border-white/10 overflow-hidden">
+                    <div class="p-4 border-b border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div>
+                            <h3 class="text-sm font-bold text-white">
+                                <i class="fa-solid fa-table-list text-amber-400 mr-1.5"></i>
+                                Detailed Sales Orders & Transactions Ledger
+                            </h3>
+                            <p class="text-[11px] text-slate-400">Complete line-by-line financial breakdown with grand total summary</p>
+                        </div>
+                        <span id="repTransactionsCountBadge" class="px-3 py-1 rounded-xl bg-slate-900 border border-white/10 font-mono-num text-xs font-bold text-amber-300">
+                            0 matching transactions
+                        </span>
+                    </div>
+
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="border-b border-white/10 text-[10px] uppercase tracking-wider text-slate-400 bg-slate-950/80">
+                                    <th class="py-3 px-3.5">Order #</th>
+                                    <th class="py-3 px-3.5">Date & Time</th>
+                                    <th class="py-3 px-3.5">Branch</th>
+                                    <th class="py-3 px-3.5">Customer / Table</th>
+                                    <th class="py-3 px-3.5">Channel</th>
+                                    <th class="py-3 px-3.5">Personnel</th>
+                                    <th class="py-3 px-3.5">Tender</th>
+                                    <th class="py-3 px-3.5">Status</th>
+                                    <th class="py-3 px-3.5 text-right">Subtotal</th>
+                                    <th class="py-3 px-3.5 text-right">Discount</th>
+                                    <th class="py-3 px-3.5 text-right">Tax+Svc</th>
+                                    <th class="py-3 px-3.5 text-right">Tip</th>
+                                    <th class="py-3 px-3.5 text-right">Total Amount</th>
+                                    <th class="py-3 px-3.5 text-right">Receipt</th>
+                                </tr>
+                            </thead>
+                            <tbody id="repTransactionsTableBody"></tbody>
+                            <tfoot id="repTransactionsTableFoot" class="bg-slate-950/95 border-t-2 border-amber-500/40 font-mono-num text-xs font-extrabold text-white"></tfoot>
                         </table>
                     </div>
                 </div>
@@ -1009,6 +1380,117 @@ declare(strict_types=1);
                 <button type="submit" class="flex-1 py-2.5 rounded-xl bg-amber-500 text-slate-950 font-extrabold text-xs">Unlock POS</button>
             </div>
         </form>
+    </div>
+
+    <!-- 9. Full-Screen Hospitality Authentication & Operator Login Screen -->
+    <div id="loginScreenOverlay" class="fixed inset-0 z-50 bg-[#07090e]/95 backdrop-blur-xl flex items-center justify-center p-4 overflow-y-auto">
+        <div class="max-w-5xl w-full grid grid-cols-1 lg:grid-cols-12 rounded-3xl overflow-hidden border border-white/15 shadow-2xl bg-[#0d111a]">
+
+            <!-- Left Column: Sign-In Form & Tactile PIN Keypad (5 Cols) -->
+            <div class="lg:col-span-5 p-7 sm:p-8 flex flex-col justify-between border-b lg:border-b-0 lg:border-r border-white/10 bg-gradient-to-b from-slate-900/90 to-slate-950">
+                <div>
+                    <!-- Brand Header -->
+                    <div class="flex items-center gap-3 mb-6">
+                        <div id="loginBrandLogo"
+                             class="w-11 h-11 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-slate-950 font-extrabold text-base flex items-center justify-center shadow-lg shadow-amber-500/25">
+                            S&S
+                        </div>
+                        <div>
+                            <h2 id="loginBrandName" class="text-base font-extrabold text-white tracking-tight">Saffron & Slate Hospitality</h2>
+                            <p class="text-[11px] text-amber-400 font-medium">LITEROS Restaurant OS • Terminal Login</p>
+                        </div>
+                    </div>
+
+                    <form id="loginAuthForm" onsubmit="LiterosApp.submitLoginScreen(event)" class="space-y-4">
+                        <div>
+                            <label class="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                                Email or Employee Code <span class="text-slate-500 font-normal">(Optional for PIN-only)</span>
+                            </label>
+                            <div class="relative">
+                                <i class="fa-solid fa-id-card-clip absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 text-xs"></i>
+                                <input id="loginIdentifierInput"
+                                       type="text"
+                                       placeholder="e.g. elena@saffronandslate.com or EMP-001"
+                                       class="w-full pl-9 pr-3.5 py-2.5 rounded-xl bg-slate-950 border border-white/10 focus:border-amber-500 text-xs text-white outline-none">
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="flex items-center justify-between mb-1.5">
+                                <label class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                                    POS PIN / Password
+                                </label>
+                                <button type="button" onclick="LiterosApp.clearLoginPin()" class="text-[11px] text-amber-400 hover:underline">
+                                    Clear PIN
+                                </button>
+                            </div>
+                            <div class="relative">
+                                <i class="fa-solid fa-lock absolute left-3.5 top-1/2 -translate-y-1/2 text-amber-400 text-xs"></i>
+                                <input id="loginPinInput"
+                                       type="password"
+                                       required
+                                       maxlength="10"
+                                       placeholder="Enter 4-digit PIN (e.g. 1111)"
+                                       class="w-full pl-9 pr-4 py-3 rounded-xl bg-slate-950 border border-amber-500/40 focus:border-amber-400 font-mono-num text-base tracking-widest text-white outline-none">
+                            </div>
+                        </div>
+
+                        <!-- Touch PIN Keypad -->
+                        <div class="grid grid-cols-3 gap-2 pt-1">
+                            <button type="button" onclick="LiterosApp.appendLoginPin('1')" class="py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-white/10 font-mono-num text-sm font-bold text-white transition">1</button>
+                            <button type="button" onclick="LiterosApp.appendLoginPin('2')" class="py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-white/10 font-mono-num text-sm font-bold text-white transition">2</button>
+                            <button type="button" onclick="LiterosApp.appendLoginPin('3')" class="py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-white/10 font-mono-num text-sm font-bold text-white transition">3</button>
+                            <button type="button" onclick="LiterosApp.appendLoginPin('4')" class="py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-white/10 font-mono-num text-sm font-bold text-white transition">4</button>
+                            <button type="button" onclick="LiterosApp.appendLoginPin('5')" class="py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-white/10 font-mono-num text-sm font-bold text-white transition">5</button>
+                            <button type="button" onclick="LiterosApp.appendLoginPin('6')" class="py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-white/10 font-mono-num text-sm font-bold text-white transition">6</button>
+                            <button type="button" onclick="LiterosApp.appendLoginPin('7')" class="py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-white/10 font-mono-num text-sm font-bold text-white transition">7</button>
+                            <button type="button" onclick="LiterosApp.appendLoginPin('8')" class="py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-white/10 font-mono-num text-sm font-bold text-white transition">8</button>
+                            <button type="button" onclick="LiterosApp.appendLoginPin('9')" class="py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-white/10 font-mono-num text-sm font-bold text-white transition">9</button>
+                            <button type="button" onclick="LiterosApp.clearLoginPin()" class="py-2.5 rounded-xl bg-rose-950/50 hover:bg-rose-900/60 border border-rose-500/30 text-xs font-bold text-rose-300 transition">CLR</button>
+                            <button type="button" onclick="LiterosApp.appendLoginPin('0')" class="py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-white/10 font-mono-num text-sm font-bold text-white transition">0</button>
+                            <button type="button" onclick="LiterosApp.backspaceLoginPin()" class="py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-white/10 text-xs font-bold text-slate-300 transition"><i class="fa-solid fa-delete-left"></i></button>
+                        </div>
+
+                        <button type="submit"
+                                class="w-full py-3.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-extrabold text-xs shadow-lg shadow-amber-500/25 flex items-center justify-center gap-2 transition">
+                            <i class="fa-solid fa-right-to-bracket"></i>
+                            Sign In & Unlock POS Terminal
+                        </button>
+                    </form>
+                </div>
+
+                <div class="pt-5 mt-5 border-t border-white/10 flex items-center justify-between text-[11px] text-slate-400">
+                    <span><i class="fa-solid fa-shield-halved text-emerald-400 mr-1"></i>Role-Based Shift Tracking</span>
+                    <span class="font-mono-num">PHP 8 • MySQL</span>
+                </div>
+            </div>
+
+            <!-- Right Column: Seeded Demo Credentials Directory (7 Cols) -->
+            <div class="lg:col-span-7 p-7 sm:p-8 flex flex-col justify-between bg-[#090c14]">
+                <div>
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-white/10">
+                        <div>
+                            <span class="px-2.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold uppercase tracking-wider">
+                                Seeded Demo Accounts
+                            </span>
+                            <h3 class="text-base font-bold text-white mt-1.5">Click Any Demo Account Below to Auto-Fill & Sign In</h3>
+                            <p class="text-xs text-slate-400">All 7 seeded restaurant personnel across your 3 branches are listed below with their credentials:</p>
+                        </div>
+                    </div>
+
+                    <!-- Dynamic Demo Credentials Table / Cards -->
+                    <div id="loginDemoCredentialsList" class="mt-4 space-y-2.5 max-h-[380px] overflow-y-auto pr-1"></div>
+                </div>
+
+                <div class="mt-5 p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/25 flex items-start gap-3 text-xs text-amber-200">
+                    <i class="fa-solid fa-circle-info text-amber-400 mt-0.5"></i>
+                    <div>
+                        <strong>Tip:</strong> Clicking any staff row above automatically fills their <strong>Email / Employee ID</strong> and <strong>PIN Code</strong>. You can also click <strong>Quick Sign-In</strong> on any row to log in immediately.
+                    </div>
+                </div>
+            </div>
+
+        </div>
     </div>
 
     <!-- Toast Notification Stack -->

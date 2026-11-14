@@ -585,7 +585,7 @@ try {
         case 'verify_pin':
             $pin = trim((string)($payload['pin_code'] ?? ''));
             $stmt = $pdo->prepare("
-                SELECT s.*, b.name AS branch_name
+                SELECT s.*, b.name AS branch_name, b.code AS branch_code
                 FROM staff s
                 LEFT JOIN branches b ON b.id = s.branch_id
                 WHERE s.pin_code = ? AND s.is_active = 1
@@ -599,6 +599,47 @@ try {
             }
             respond([
                 'message' => "Welcome back, {$staffMember['full_name']} ({$staffMember['role']})",
+                'staff' => $staffMember
+            ]);
+            break;
+
+        case 'login':
+            $identifier = trim((string)($payload['identifier'] ?? ''));
+            $pin = trim((string)($payload['pin_code'] ?? ''));
+
+            if ($pin === '') {
+                respond(['error' => 'Please enter your POS PIN / Password to sign in.'], 422);
+            }
+
+            if ($identifier !== '') {
+                $stmt = $pdo->prepare("
+                    SELECT s.*, b.name AS branch_name, b.code AS branch_code
+                    FROM staff s
+                    LEFT JOIN branches b ON b.id = s.branch_id
+                    WHERE (LOWER(s.email) = LOWER(?) OR LOWER(s.employee_code) = LOWER(?))
+                      AND s.pin_code = ?
+                      AND s.is_active = 1
+                    LIMIT 1
+                ");
+                $stmt->execute([$identifier, $identifier, $pin]);
+            } else {
+                $stmt = $pdo->prepare("
+                    SELECT s.*, b.name AS branch_name, b.code AS branch_code
+                    FROM staff s
+                    LEFT JOIN branches b ON b.id = s.branch_id
+                    WHERE s.pin_code = ? AND s.is_active = 1
+                    LIMIT 1
+                ");
+                $stmt->execute([$pin]);
+            }
+
+            $staffMember = $stmt->fetch();
+            if (!$staffMember) {
+                respond(['error' => 'Invalid login credentials. Click any demo credential row on the right or check your Email / Employee ID and PIN.'], 401);
+            }
+
+            respond([
+                'message' => "Signed in as {$staffMember['full_name']} ({$staffMember['role']} • {$staffMember['branch_name']})",
                 'staff' => $staffMember
             ]);
             break;
@@ -689,6 +730,350 @@ try {
         case 'reset_demo_data':
             Database::resetAndSeed();
             respond(['message' => 'Demo database reset to fresh factory state']);
+            break;
+
+        // =====================================================================
+        // 8. FULL BUSINESS INTELLIGENCE & FINANCIAL REPORTS ENGINE
+        // =====================================================================
+        case 'reports_query':
+            $fromDate = trim((string)($_GET['from_date'] ?? $payload['from_date'] ?? ''));
+            $toDate = trim((string)($_GET['to_date'] ?? $payload['to_date'] ?? ''));
+            $branchId = (int)($_GET['branch_id'] ?? $payload['branch_id'] ?? 0);
+            $orderType = trim((string)($_GET['order_type'] ?? $payload['order_type'] ?? 'all'));
+            $paymentMethod = trim((string)($_GET['payment_method'] ?? $payload['payment_method'] ?? 'all'));
+            $paymentStatus = trim((string)($_GET['payment_status'] ?? $payload['payment_status'] ?? 'all'));
+            $orderStatus = trim((string)($_GET['order_status'] ?? $payload['order_status'] ?? 'all'));
+            $staffId = (int)($_GET['staff_id'] ?? $payload['staff_id'] ?? 0);
+            $search = trim((string)($_GET['search'] ?? $payload['search'] ?? ''));
+
+            $where = ['1=1'];
+            $params = [];
+
+            if ($fromDate !== '') {
+                $where[] = 'o.created_at >= ?';
+                $params[] = $fromDate . ' 00:00:00';
+            }
+            if ($toDate !== '') {
+                $where[] = 'o.created_at <= ?';
+                $params[] = $toDate . ' 23:59:59';
+            }
+            if ($branchId > 0) {
+                $where[] = 'o.branch_id = ?';
+                $params[] = $branchId;
+            }
+            if ($orderType !== '' && $orderType !== 'all') {
+                $where[] = 'o.order_type = ?';
+                $params[] = $orderType;
+            }
+            if ($paymentMethod !== '' && $paymentMethod !== 'all') {
+                $where[] = 'o.payment_method = ?';
+                $params[] = $paymentMethod;
+            }
+            if ($paymentStatus !== '' && $paymentStatus !== 'all') {
+                $where[] = 'o.payment_status = ?';
+                $params[] = $paymentStatus;
+            }
+            if ($orderStatus !== '' && $orderStatus !== 'all') {
+                $where[] = 'o.status = ?';
+                $params[] = $orderStatus;
+            }
+            if ($staffId > 0) {
+                $where[] = 'o.staff_id = ?';
+                $params[] = $staffId;
+            }
+            if ($search !== '') {
+                $where[] = '(o.order_number LIKE ? OR o.customer_name LIKE ? OR o.notes LIKE ?)';
+                $like = '%' . $search . '%';
+                $params[] = $like;
+                $params[] = $like;
+                $params[] = $like;
+            }
+
+            $whereSql = implode(' AND ', $where);
+
+            $stmt = $pdo->prepare("
+                SELECT o.*,
+                       b.name AS branch_name, b.code AS branch_code,
+                       s.full_name AS staff_name, s.role AS staff_role, s.commission_rate AS staff_commission_rate,
+                       t.table_number, t.zone AS table_zone
+                FROM orders o
+                LEFT JOIN branches b ON b.id = o.branch_id
+                LEFT JOIN staff s ON s.id = o.staff_id
+                LEFT JOIN restaurant_tables t ON t.id = o.table_id
+                WHERE {$whereSql}
+                ORDER BY o.created_at DESC, o.id DESC
+            ");
+            $stmt->execute($params);
+            $orders = $stmt->fetchAll();
+
+            // Attach items & compute COGS per order
+            $allOrderItems = [];
+            if (!empty($orders)) {
+                $orderIds = array_column($orders, 'id');
+                $ph = implode(',', array_fill(0, count($orderIds), '?'));
+                $itemStmt = $pdo->prepare("
+                    SELECT oi.*, m.category_id, c.name AS category_name, c.color AS category_color
+                    FROM order_items oi
+                    LEFT JOIN menu_items m ON m.id = oi.menu_item_id
+                    LEFT JOIN categories c ON c.id = m.category_id
+                    WHERE oi.order_id IN ({$ph})
+                    ORDER BY oi.id ASC
+                ");
+                $itemStmt->execute($orderIds);
+                $allOrderItems = $itemStmt->fetchAll();
+            }
+
+            $itemsByOrder = [];
+            foreach ($allOrderItems as $oi) {
+                $itemsByOrder[$oi['order_id']][] = $oi;
+            }
+
+            // Initialize Aggregations
+            $kpis = [
+                'total_transactions' => count($orders),
+                'valid_orders' => 0,
+                'cancelled_orders' => 0,
+                'total_guests' => 0,
+                'gross_revenue' => 0.0,
+                'net_subtotal' => 0.0,
+                'total_discounts' => 0.0,
+                'total_tax' => 0.0,
+                'total_service_charge' => 0.0,
+                'total_tips' => 0.0,
+                'total_cogs' => 0.0,
+                'gross_profit' => 0.0,
+                'gross_margin_pct' => 0.0,
+                'avg_order_value' => 0.0,
+                'paid_amount' => 0.0,
+                'unpaid_amount' => 0.0,
+            ];
+
+            $dailyMap = [];
+            $paymentMethodMap = [
+                'Card' => ['method' => 'Card', 'count' => 0, 'amount' => 0.0],
+                'Cash' => ['method' => 'Cash', 'count' => 0, 'amount' => 0.0],
+                'QR Pay' => ['method' => 'QR Pay', 'count' => 0, 'amount' => 0.0],
+                'Split' => ['method' => 'Split', 'count' => 0, 'amount' => 0.0],
+            ];
+            $orderTypeMap = [
+                'Dine-In' => ['type' => 'Dine-In', 'count' => 0, 'amount' => 0.0, 'guests' => 0],
+                'Takeaway' => ['type' => 'Takeaway', 'count' => 0, 'amount' => 0.0, 'guests' => 0],
+                'Delivery' => ['type' => 'Delivery', 'count' => 0, 'amount' => 0.0, 'guests' => 0],
+            ];
+            $hourlyMap = array_fill(0, 24, ['hour' => 0, 'label' => '', 'count' => 0, 'amount' => 0.0]);
+            for ($h = 0; $h < 24; $h++) {
+                $hourlyMap[$h]['hour'] = $h;
+                $hourlyMap[$h]['label'] = sprintf('%02d:00', $h);
+            }
+
+            $staffAgg = [];
+            $branchAgg = [];
+            $itemAgg = [];
+            $categoryAgg = [];
+
+            foreach ($orders as &$ord) {
+                $oItems = $itemsByOrder[$ord['id']] ?? [];
+                $ord['items'] = $oItems;
+
+                $orderCogs = 0.0;
+                $orderQty = 0;
+                foreach ($oItems as $it) {
+                    $q = (int)$it['quantity'];
+                    $c = (float)$it['unit_cost'] * $q;
+                    $orderCogs += $c;
+                    $orderQty += $q;
+                }
+                $ord['order_cogs'] = round($orderCogs, 2);
+                $ord['items_count'] = $orderQty;
+                $ord['net_sales'] = round((float)$ord['subtotal'] - (float)$ord['discount_amount'], 2);
+                $ord['gross_profit'] = round($ord['net_sales'] - $orderCogs, 2);
+
+                if ($ord['status'] === 'Cancelled') {
+                    $kpis['cancelled_orders']++;
+                    continue;
+                }
+
+                $kpis['valid_orders']++;
+                $kpis['total_guests'] += (int)$ord['guests_count'];
+                $kpis['gross_revenue'] += (float)$ord['total_amount'];
+                $kpis['net_subtotal'] += $ord['net_sales'];
+                $kpis['total_discounts'] += (float)$ord['discount_amount'];
+                $kpis['total_tax'] += (float)$ord['tax_amount'];
+                $kpis['total_service_charge'] += (float)$ord['service_charge'];
+                $kpis['total_tips'] += (float)$ord['tip_amount'];
+                $kpis['total_cogs'] += $orderCogs;
+
+                if ($ord['payment_status'] === 'Paid') {
+                    $kpis['paid_amount'] += (float)$ord['total_amount'];
+                } elseif ($ord['payment_status'] === 'Unpaid') {
+                    $kpis['unpaid_amount'] += (float)$ord['total_amount'];
+                }
+
+                // Daily Bucket
+                $dayKey = substr((string)$ord['created_at'], 0, 10);
+                if (!isset($dailyMap[$dayKey])) {
+                    $dailyMap[$dayKey] = [
+                        'date' => $dayKey,
+                        'orders_count' => 0,
+                        'gross_revenue' => 0.0,
+                        'net_sales' => 0.0,
+                        'cogs' => 0.0,
+                        'gross_profit' => 0.0,
+                        'tax' => 0.0,
+                        'tips' => 0.0,
+                    ];
+                }
+                $dailyMap[$dayKey]['orders_count']++;
+                $dailyMap[$dayKey]['gross_revenue'] = round($dailyMap[$dayKey]['gross_revenue'] + (float)$ord['total_amount'], 2);
+                $dailyMap[$dayKey]['net_sales'] = round($dailyMap[$dayKey]['net_sales'] + $ord['net_sales'], 2);
+                $dailyMap[$dayKey]['cogs'] = round($dailyMap[$dayKey]['cogs'] + $orderCogs, 2);
+                $dailyMap[$dayKey]['gross_profit'] = round($dailyMap[$dayKey]['gross_profit'] + $ord['gross_profit'], 2);
+                $dailyMap[$dayKey]['tax'] = round($dailyMap[$dayKey]['tax'] + (float)$ord['tax_amount'], 2);
+                $dailyMap[$dayKey]['tips'] = round($dailyMap[$dayKey]['tips'] + (float)$ord['tip_amount'], 2);
+
+                // Hourly Bucket
+                $hourStr = substr((string)$ord['created_at'], 11, 2);
+                $hr = is_numeric($hourStr) ? (int)$hourStr : 12;
+                if (isset($hourlyMap[$hr])) {
+                    $hourlyMap[$hr]['count']++;
+                    $hourlyMap[$hr]['amount'] = round($hourlyMap[$hr]['amount'] + (float)$ord['total_amount'], 2);
+                }
+
+                // Payment Method Bucket
+                $pm = $ord['payment_method'] ?: 'Card';
+                if (!isset($paymentMethodMap[$pm])) {
+                    $paymentMethodMap[$pm] = ['method' => $pm, 'count' => 0, 'amount' => 0.0];
+                }
+                $paymentMethodMap[$pm]['count']++;
+                $paymentMethodMap[$pm]['amount'] = round($paymentMethodMap[$pm]['amount'] + (float)$ord['total_amount'], 2);
+
+                // Order Type Bucket
+                $ot = $ord['order_type'] ?: 'Dine-In';
+                if (!isset($orderTypeMap[$ot])) {
+                    $orderTypeMap[$ot] = ['type' => $ot, 'count' => 0, 'amount' => 0.0, 'guests' => 0];
+                }
+                $orderTypeMap[$ot]['count']++;
+                $orderTypeMap[$ot]['amount'] = round($orderTypeMap[$ot]['amount'] + (float)$ord['total_amount'], 2);
+                $orderTypeMap[$ot]['guests'] += (int)$ord['guests_count'];
+
+                // Staff Bucket
+                $sid = (int)$ord['staff_id'];
+                if (!isset($staffAgg[$sid])) {
+                    $staffAgg[$sid] = [
+                        'staff_id' => $sid,
+                        'staff_name' => $ord['staff_name'] ?: 'Staff',
+                        'role' => $ord['staff_role'] ?: 'Waiter',
+                        'commission_rate' => (float)($ord['staff_commission_rate'] ?? 2.5),
+                        'orders_count' => 0,
+                        'gross_sales' => 0.0,
+                        'tips_collected' => 0.0,
+                        'commission_earned' => 0.0,
+                    ];
+                }
+                $staffAgg[$sid]['orders_count']++;
+                $staffAgg[$sid]['gross_sales'] = round($staffAgg[$sid]['gross_sales'] + (float)$ord['total_amount'], 2);
+                $staffAgg[$sid]['tips_collected'] = round($staffAgg[$sid]['tips_collected'] + (float)$ord['tip_amount'], 2);
+                $staffAgg[$sid]['commission_earned'] = round(
+                    $staffAgg[$sid]['gross_sales'] * ($staffAgg[$sid]['commission_rate'] / 100),
+                    2
+                );
+
+                // Branch Bucket
+                $bid = (int)$ord['branch_id'];
+                if (!isset($branchAgg[$bid])) {
+                    $branchAgg[$bid] = [
+                        'branch_id' => $bid,
+                        'branch_name' => $ord['branch_name'] ?: 'Branch',
+                        'branch_code' => $ord['branch_code'] ?: 'BR',
+                        'orders_count' => 0,
+                        'gross_revenue' => 0.0,
+                        'net_sales' => 0.0,
+                        'tax' => 0.0,
+                        'tips' => 0.0,
+                    ];
+                }
+                $branchAgg[$bid]['orders_count']++;
+                $branchAgg[$bid]['gross_revenue'] = round($branchAgg[$bid]['gross_revenue'] + (float)$ord['total_amount'], 2);
+                $branchAgg[$bid]['net_sales'] = round($branchAgg[$bid]['net_sales'] + $ord['net_sales'], 2);
+                $branchAgg[$bid]['tax'] = round($branchAgg[$bid]['tax'] + (float)$ord['tax_amount'], 2);
+                $branchAgg[$bid]['tips'] = round($branchAgg[$bid]['tips'] + (float)$ord['tip_amount'], 2);
+
+                // Item & Category Buckets
+                foreach ($oItems as $it) {
+                    $mid = (int)$it['menu_item_id'];
+                    $q = (int)$it['quantity'];
+                    $rev = (float)$it['line_total'];
+                    $cost = (float)$it['unit_cost'] * $q;
+                    $prof = $rev - $cost;
+
+                    if (!isset($itemAgg[$mid])) {
+                        $itemAgg[$mid] = [
+                            'menu_item_id' => $mid,
+                            'item_name' => $it['item_name'],
+                            'category_name' => $it['category_name'] ?: 'General',
+                            'qty_sold' => 0,
+                            'revenue' => 0.0,
+                            'cost' => 0.0,
+                            'profit' => 0.0,
+                        ];
+                    }
+                    $itemAgg[$mid]['qty_sold'] += $q;
+                    $itemAgg[$mid]['revenue'] = round($itemAgg[$mid]['revenue'] + $rev, 2);
+                    $itemAgg[$mid]['cost'] = round($itemAgg[$mid]['cost'] + $cost, 2);
+                    $itemAgg[$mid]['profit'] = round($itemAgg[$mid]['profit'] + $prof, 2);
+
+                    $catName = $it['category_name'] ?: 'Uncategorized';
+                    if (!isset($categoryAgg[$catName])) {
+                        $categoryAgg[$catName] = [
+                            'category_name' => $catName,
+                            'color' => $it['category_color'] ?: '#f59e0b',
+                            'qty_sold' => 0,
+                            'revenue' => 0.0,
+                            'profit' => 0.0,
+                        ];
+                    }
+                    $categoryAgg[$catName]['qty_sold'] += $q;
+                    $categoryAgg[$catName]['revenue'] = round($categoryAgg[$catName]['revenue'] + $rev, 2);
+                    $categoryAgg[$catName]['profit'] = round($categoryAgg[$catName]['profit'] + $prof, 2);
+                }
+            }
+            unset($ord);
+
+            $kpis['gross_revenue'] = round($kpis['gross_revenue'], 2);
+            $kpis['net_subtotal'] = round($kpis['net_subtotal'], 2);
+            $kpis['total_discounts'] = round($kpis['total_discounts'], 2);
+            $kpis['total_tax'] = round($kpis['total_tax'], 2);
+            $kpis['total_service_charge'] = round($kpis['total_service_charge'], 2);
+            $kpis['total_tips'] = round($kpis['total_tips'], 2);
+            $kpis['total_cogs'] = round($kpis['total_cogs'], 2);
+            $kpis['gross_profit'] = round($kpis['net_subtotal'] - $kpis['total_cogs'], 2);
+            $kpis['gross_margin_pct'] = $kpis['net_subtotal'] > 0
+                ? round(($kpis['gross_profit'] / $kpis['net_subtotal']) * 100, 1)
+                : 0.0;
+            $kpis['avg_order_value'] = $kpis['valid_orders'] > 0
+                ? round($kpis['gross_revenue'] / $kpis['valid_orders'], 2)
+                : 0.0;
+            $kpis['paid_amount'] = round($kpis['paid_amount'], 2);
+            $kpis['unpaid_amount'] = round($kpis['unpaid_amount'], 2);
+
+            ksort($dailyMap);
+            usort($itemAgg, fn($a, $b) => $b['revenue'] <=> $a['revenue']);
+            usort($categoryAgg, fn($a, $b) => $b['revenue'] <=> $a['revenue']);
+            usort($staffAgg, fn($a, $b) => $b['gross_sales'] <=> $a['gross_sales']);
+            usort($branchAgg, fn($a, $b) => $b['gross_revenue'] <=> $a['gross_revenue']);
+
+            respond([
+                'kpis' => $kpis,
+                'daily_trend' => array_values($dailyMap),
+                'hourly_trend' => array_values($hourlyMap),
+                'payment_breakdown' => array_values($paymentMethodMap),
+                'order_type_breakdown' => array_values($orderTypeMap),
+                'category_breakdown' => array_values($categoryAgg),
+                'top_items' => array_values($itemAgg),
+                'staff_performance' => array_values($staffAgg),
+                'branch_performance' => array_values($branchAgg),
+                'transactions' => $orders,
+            ]);
             break;
 
         default:
