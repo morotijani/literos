@@ -1323,11 +1323,11 @@ try {
                 'order_type_breakdown' => array_values($orderTypeMap),
                 'category_breakdown' => array_values($categoryAgg),
                 'expenditure_breakdown' => array_values($expByCategory),
-                'expenditures' => array_slice($matchedExpenditures, 0, 100),
+                'expenditures' => $matchedExpenditures,
                 'top_items' => array_values($itemAgg),
                 'staff_performance' => array_values($staffAgg),
                 'branch_performance' => array_values($branchAgg),
-                'transactions' => array_slice($orders, 0, 250),
+                'transactions' => $orders,
                 'transactions_total_count' => count($orders),
             ]);
             break;

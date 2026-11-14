@@ -935,19 +935,34 @@ declare(strict_types=1);
                     </div>
                 </div>
 
-                <!-- Master Filtered Transactions & Line-Item Audit Table (With Footer Totals Row) -->
+                <!-- Master Filtered Transactions & Line-Item Audit Table (With Pagination & Footer Totals Row) -->
                 <div class="glass-panel rounded-2xl border border-white/10 overflow-hidden">
-                    <div class="p-4 border-b border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div class="p-4 border-b border-white/10 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
                         <div>
                             <h3 class="text-sm font-bold text-white">
                                 <i class="fa-solid fa-table-list text-amber-400 mr-1.5"></i>
                                 Detailed Sales Orders & Transactions Ledger
                             </h3>
-                            <p class="text-[11px] text-slate-400">Complete line-by-line financial breakdown with grand total summary</p>
+                            <p class="text-[11px] text-slate-400">Complete line-by-line financial breakdown with pagination, page subtotals & grand total summary</p>
                         </div>
-                        <span id="repTransactionsCountBadge" class="px-3 py-1 rounded-xl bg-slate-900 border border-white/10 font-mono-num text-xs font-bold text-amber-300">
-                            0 matching transactions
-                        </span>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span id="repTransactionsCountBadge" class="px-3 py-1.5 rounded-xl bg-slate-900 border border-white/10 font-mono-num text-xs font-bold text-amber-300">
+                                0 matching transactions
+                            </span>
+                            <div class="flex items-center gap-1.5 bg-slate-900 border border-white/10 rounded-xl px-2.5 py-1">
+                                <span class="text-[11px] text-slate-400">Show:</span>
+                                <select id="repPageSizeSelect"
+                                        onchange="LiterosApp.setReportPageSize(this.value)"
+                                        class="bg-transparent text-xs font-mono-num font-bold text-white outline-none cursor-pointer">
+                                    <option value="50" class="bg-slate-900">50 / page</option>
+                                    <option value="100" selected class="bg-slate-900">100 / page</option>
+                                    <option value="250" class="bg-slate-900">250 / page</option>
+                                    <option value="500" class="bg-slate-900">500 / page</option>
+                                    <option value="all" class="bg-slate-900">All Rows (Full List)</option>
+                                </select>
+                            </div>
+                            <div id="repTopQuickPager" class="flex items-center gap-1"></div>
+                        </div>
                     </div>
 
                     <div class="overflow-x-auto">
@@ -974,6 +989,9 @@ declare(strict_types=1);
                             <tfoot id="repTransactionsTableFoot" class="bg-slate-950/95 border-t-2 border-amber-500/40 font-mono-num text-xs font-extrabold text-white"></tfoot>
                         </table>
                     </div>
+
+                    <!-- Bottom Interactive Pagination Bar -->
+                    <div id="repPaginationBar" class="p-4 border-t border-white/10 bg-slate-950/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3"></div>
                 </div>
             </section>
 

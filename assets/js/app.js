@@ -2136,6 +2136,8 @@ const LiterosApp = (() => {
         categoryMix: null
     };
     let latestReportData = null;
+    let reportPage = 1;
+    let reportPageSize = 100; // 50, 100, 250, 500, or 'all'
 
     function renderReportsFilterOptions() {
         const branchSel = document.getElementById('repBranchSelect');
@@ -2218,6 +2220,7 @@ const LiterosApp = (() => {
         try {
             const data = await api('reports_query', null, '&' + params.toString());
             latestReportData = data;
+            reportPage = 1;
             renderReportKpis(data.kpis);
             renderReportCharts(data);
             renderReportTables(data);
@@ -2451,24 +2454,85 @@ const LiterosApp = (() => {
             }
         }
 
-        // 3. Detailed Transactions Table + Grand Total Footer
+        // 3. Detailed Transactions Table + Pagination + Grand Total Footer
+        renderReportTransactionsPage();
+    }
+
+    function setReportPage(page) {
+        if (!latestReportData) return;
+        const txs = latestReportData.transactions || [];
+        const pageSize = reportPageSize === 'all' ? Math.max(1, txs.length) : Number(reportPageSize || 100);
+        const totalPages = Math.max(1, Math.ceil(txs.length / pageSize));
+        reportPage = Math.max(1, Math.min(totalPages, Number(page) || 1));
+        renderReportTransactionsPage();
+    }
+
+    function setReportPageSize(sizeVal) {
+        reportPageSize = sizeVal === 'all' ? 'all' : (Number(sizeVal) || 100);
+        reportPage = 1;
+        renderReportTransactionsPage();
+    }
+
+    function renderReportTransactionsPage() {
+        const data = latestReportData;
+        if (!data) return;
+
         const txBody = document.getElementById('repTransactionsTableBody');
         const txFoot = document.getElementById('repTransactionsTableFoot');
         const badge = document.getElementById('repTransactionsCountBadge');
-        const txs = data.transactions || [];
-        const totalMatchingCount = data.transactions_total_count ?? txs.length;
+        const topPager = document.getElementById('repTopQuickPager');
+        const bottomPager = document.getElementById('repPaginationBar');
+
+        const allTxs = data.transactions || [];
+        const totalCount = allTxs.length;
+        const pageSize = reportPageSize === 'all' ? Math.max(1, totalCount) : Number(reportPageSize || 100);
+        const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+        if (reportPage > totalPages) reportPage = totalPages;
+
+        const startIdx = (reportPage - 1) * pageSize;
+        const endIdx = reportPageSize === 'all' ? totalCount : Math.min(totalCount, startIdx + pageSize);
+        const pageTxs = allTxs.slice(startIdx, endIdx);
 
         if (badge) {
-            badge.textContent = totalMatchingCount > txs.length
-                ? `Showing latest ${txs.length} of ${totalMatchingCount.toLocaleString()} matching transactions`
-                : `${totalMatchingCount.toLocaleString()} matching transaction${totalMatchingCount === 1 ? '' : 's'}`;
+            if (totalCount === 0) {
+                badge.textContent = '0 matching transactions';
+            } else if (reportPageSize === 'all' || totalCount <= pageSize) {
+                badge.textContent = `Showing all ${totalCount.toLocaleString()} matching transaction${totalCount === 1 ? '' : 's'}`;
+            } else {
+                badge.textContent = `Showing ${(startIdx + 1).toLocaleString()}–${endIdx.toLocaleString()} of ${totalCount.toLocaleString()} transactions`;
+            }
+        }
+
+        // Top quick Prev / Next pager
+        if (topPager) {
+            if (totalPages <= 1) {
+                topPager.innerHTML = '';
+            } else {
+                topPager.innerHTML = `
+                    <button type="button"
+                            onclick="LiterosApp.setReportPage(${reportPage - 1})"
+                            ${reportPage <= 1 ? 'disabled' : ''}
+                            class="px-2.5 py-1 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed border border-white/10 text-xs font-bold text-slate-200 transition">
+                        <i class="fa-solid fa-chevron-left mr-1"></i>Prev
+                    </button>
+                    <span class="px-2 text-xs font-mono-num text-slate-300">
+                        Page <strong class="text-amber-300">${reportPage}</strong> / ${totalPages}
+                    </span>
+                    <button type="button"
+                            onclick="LiterosApp.setReportPage(${reportPage + 1})"
+                            ${reportPage >= totalPages ? 'disabled' : ''}
+                            class="px-2.5 py-1 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-extrabold text-slate-950 transition">
+                        Next<i class="fa-solid fa-chevron-right ml-1"></i>
+                    </button>
+                `;
+            }
         }
 
         if (txBody) {
-            if (txs.length === 0) {
+            if (pageTxs.length === 0) {
                 txBody.innerHTML = `<tr><td colspan="14" class="py-12 text-center text-xs text-slate-500">No transactions match your current filter criteria.</td></tr>`;
             } else {
-                txBody.innerHTML = txs.map(o => {
+                txBody.innerHTML = pageTxs.map(o => {
                     const isCancelled = o.status === 'Cancelled';
                     const statusStyle = {
                         Preparing: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
@@ -2523,19 +2587,120 @@ const LiterosApp = (() => {
 
         if (txFoot && data.kpis) {
             const k = data.kpis;
-            const totalSub = (txs || []).filter(t => t.status !== 'Cancelled').reduce((s, t) => s + Number(t.subtotal), 0);
+            const validPageTxs = pageTxs.filter(t => t.status !== 'Cancelled');
+            const pageSub = validPageTxs.reduce((s, t) => s + Number(t.subtotal), 0);
+            const pageDisc = validPageTxs.reduce((s, t) => s + Number(t.discount_amount), 0);
+            const pageTaxSvc = validPageTxs.reduce((s, t) => s + Number(t.tax_amount) + Number(t.service_charge), 0);
+            const pageTips = validPageTxs.reduce((s, t) => s + Number(t.tip_amount), 0);
+            const pageTot = validPageTxs.reduce((s, t) => s + Number(t.total_amount), 0);
+
+            const pageRowHtml = totalPages > 1 ? `
+                <tr class="border-b border-white/10 text-slate-300 font-bold bg-slate-900/70">
+                    <td colspan="8" class="py-2.5 px-3.5 text-right uppercase tracking-wider text-[11px] text-slate-400">
+                        PAGE ${reportPage} SUBTOTAL (${validPageTxs.length} Orders on this page):
+                    </td>
+                    <td class="py-2.5 px-3.5 text-right">${money(pageSub)}</td>
+                    <td class="py-2.5 px-3.5 text-right text-rose-400">-${money(pageDisc)}</td>
+                    <td class="py-2.5 px-3.5 text-right text-cyan-300">${money(pageTaxSvc)}</td>
+                    <td class="py-2.5 px-3.5 text-right text-indigo-300">${money(pageTips)}</td>
+                    <td class="py-2.5 px-3.5 text-right text-amber-300">${money(pageTot)}</td>
+                    <td></td>
+                </tr>
+            ` : '';
+
             txFoot.innerHTML = `
+                ${pageRowHtml}
                 <tr>
                     <td colspan="8" class="py-3.5 px-3.5 text-right uppercase tracking-wider text-amber-400">
-                        GRAND TOTAL (${k.valid_orders} Valid Orders / ${k.total_guests} Guests):
+                        ALL-PAGES GRAND TOTAL (${k.valid_orders.toLocaleString()} Valid Orders / ${k.total_guests.toLocaleString()} Guests):
                     </td>
-                    <td class="py-3.5 px-3.5 text-right text-slate-200">${money(totalSub)}</td>
+                    <td class="py-3.5 px-3.5 text-right text-slate-200">${money(k.net_subtotal + k.total_discounts)}</td>
                     <td class="py-3.5 px-3.5 text-right text-rose-400">-${money(k.total_discounts)}</td>
                     <td class="py-3.5 px-3.5 text-right text-cyan-300">${money(k.total_tax + k.total_service_charge)}</td>
                     <td class="py-3.5 px-3.5 text-right text-indigo-300">${money(k.total_tips)}</td>
                     <td class="py-3.5 px-3.5 text-right text-sm text-emerald-400">${money(k.gross_revenue)}</td>
                     <td></td>
                 </tr>
+            `;
+        }
+
+        // Bottom Interactive Pagination Bar
+        if (bottomPager) {
+            if (totalCount === 0) {
+                bottomPager.innerHTML = `<div class="text-xs text-slate-500">No transactions to paginate.</div>`;
+                return;
+            }
+
+            // Build numbered page buttons window around current reportPage
+            const pageButtons = [];
+            const maxVisible = 7;
+            let startP = Math.max(1, reportPage - 3);
+            let endP = Math.min(totalPages, startP + maxVisible - 1);
+            if (endP - startP < maxVisible - 1) {
+                startP = Math.max(1, endP - maxVisible + 1);
+            }
+
+            if (startP > 1) {
+                pageButtons.push(`<button type="button" onclick="LiterosApp.setReportPage(1)" class="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-white/10 font-mono-num text-xs text-slate-300">1</button>`);
+                if (startP > 2) {
+                    pageButtons.push(`<span class="px-1 text-slate-500 text-xs">…</span>`);
+                }
+            }
+
+            for (let p = startP; p <= endP; p++) {
+                const isActive = p === reportPage;
+                pageButtons.push(`
+                    <button type="button"
+                            onclick="LiterosApp.setReportPage(${p})"
+                            class="px-3 py-1.5 rounded-lg font-mono-num text-xs font-bold transition ${
+                                isActive
+                                    ? 'bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/20'
+                                    : 'bg-slate-900 hover:bg-slate-800 border border-white/10 text-slate-300'
+                            }">
+                        ${p}
+                    </button>
+                `);
+            }
+
+            if (endP < totalPages) {
+                if (endP < totalPages - 1) {
+                    pageButtons.push(`<span class="px-1 text-slate-500 text-xs">…</span>`);
+                }
+                pageButtons.push(`<button type="button" onclick="LiterosApp.setReportPage(${totalPages})" class="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-white/10 font-mono-num text-xs text-slate-300">${totalPages}</button>`);
+            }
+
+            bottomPager.innerHTML = `
+                <div class="text-xs text-slate-400">
+                    Showing <strong class="text-white font-mono-num">${(startIdx + 1).toLocaleString()}</strong> to <strong class="text-white font-mono-num">${endIdx.toLocaleString()}</strong> of <strong class="text-amber-300 font-mono-num">${totalCount.toLocaleString()}</strong> matching orders
+                    <span class="text-slate-500 ml-1">(Page ${reportPage} of ${totalPages})</span>
+                </div>
+                <div class="flex flex-wrap items-center gap-1.5">
+                    <button type="button"
+                            onclick="LiterosApp.setReportPage(1)"
+                            ${reportPage <= 1 ? 'disabled' : ''}
+                            class="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed border border-white/10 text-xs font-semibold text-slate-300">
+                        « First
+                    </button>
+                    <button type="button"
+                            onclick="LiterosApp.setReportPage(${reportPage - 1})"
+                            ${reportPage <= 1 ? 'disabled' : ''}
+                            class="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed border border-white/10 text-xs font-bold text-slate-200">
+                        <i class="fa-solid fa-chevron-left mr-1"></i>Previous
+                    </button>
+                    ${pageButtons.join('')}
+                    <button type="button"
+                            onclick="LiterosApp.setReportPage(${reportPage + 1})"
+                            ${reportPage >= totalPages ? 'disabled' : ''}
+                            class="px-3.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-extrabold text-slate-950">
+                        Next<i class="fa-solid fa-chevron-right ml-1"></i>
+                    </button>
+                    <button type="button"
+                            onclick="LiterosApp.setReportPage(${totalPages})"
+                            ${reportPage >= totalPages ? 'disabled' : ''}
+                            class="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed border border-white/10 text-xs font-semibold text-slate-300">
+                        Last »
+                    </button>
+                </div>
             `;
         }
     }
@@ -2678,6 +2843,8 @@ const LiterosApp = (() => {
         resetReportFilters,
         runReportQuery,
         loadReportsData,
+        setReportPage,
+        setReportPageSize,
         exportFullReportCsv,
         openModal,
         closeModal,
