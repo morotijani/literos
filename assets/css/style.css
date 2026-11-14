@@ -1,0 +1,182 @@
+/* ==========================================================================
+   LITEROS — Culinary Command & Hospitality OS Stylesheet
+   Bespoke Obsidian + Warm Saffron Dark-Glass Interface
+   ========================================================================== */
+
+:root {
+  --bg-obsidian: #090b10;
+  --bg-surface: #11151f;
+  --bg-elevated: #171c29;
+  --bg-card: rgba(23, 28, 41, 0.85);
+  --bg-glass: rgba(17, 21, 31, 0.78);
+  --border-subtle: rgba(255, 255, 255, 0.07);
+  --border-highlight: rgba(245, 158, 11, 0.35);
+
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+
+  --accent-amber: #f59e0b;
+  --accent-amber-glow: rgba(245, 158, 11, 0.18);
+  --accent-emerald: #10b981;
+  --accent-emerald-glow: rgba(16, 185, 129, 0.16);
+  --accent-rose: #f43f5e;
+  --accent-rose-glow: rgba(244, 63, 94, 0.16);
+  --accent-indigo: #6366f1;
+  --accent-cyan: #06b6d4;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg-obsidian);
+  color: var(--text-primary);
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+.font-mono-num {
+  font-family: 'JetBrains Mono', monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.font-display {
+  font-family: 'Fraunces', Georgia, serif;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.4);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.25);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(245, 158, 11, 0.5);
+}
+
+/* Glass & Cards */
+.glass-panel {
+  background: var(--bg-glass);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border-subtle);
+}
+
+.pos-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pos-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--border-highlight);
+  box-shadow: 0 12px 28px -8px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(245, 158, 11, 0.18);
+}
+
+.pos-card:active {
+  transform: scale(0.985);
+}
+
+/* Navigation Rail Active State */
+.nav-btn {
+  position: relative;
+  transition: all 0.2s ease;
+}
+.nav-btn.active {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.18), rgba(245, 158, 11, 0.05));
+  color: #fbbf24;
+  border-color: rgba(245, 158, 11, 0.35);
+}
+.nav-btn.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 20%;
+  height: 60%;
+  width: 3px;
+  background: #f59e0b;
+  border-radius: 0 4px 4px 0;
+  box-shadow: 0 0 10px #f59e0b;
+}
+
+/* Category Pills */
+.cat-pill {
+  transition: all 0.18s ease;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.cat-pill.active {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: #090b10;
+  font-weight: 700;
+  border-color: #fbbf24;
+  box-shadow: 0 4px 16px rgba(245, 158, 11, 0.35);
+}
+
+/* Table Node Styling */
+.table-node {
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.table-node:hover {
+  transform: translateY(-3px);
+}
+
+/* KDS Ticket Pulse for Long Wait */
+@keyframes pulse-border {
+  0%, 100% { border-color: rgba(244, 63, 94, 0.45); }
+  50% { border-color: rgba(244, 63, 94, 0.95); }
+}
+.kds-urgent {
+  animation: pulse-border 2s infinite;
+}
+
+/* Thermal Receipt Styling */
+.thermal-receipt {
+  background: #fffdf9;
+  color: #1e293b;
+  font-family: 'JetBrains Mono', monospace;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+  position: relative;
+}
+.thermal-receipt::before,
+.thermal-receipt::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 8px;
+  background-size: 16px 16px;
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #receiptModalContent,
+  #receiptModalContent * {
+    visibility: visible;
+  }
+  #receiptModalContent {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 80mm;
+    margin: 0;
+    padding: 12px;
+    box-shadow: none !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+}
