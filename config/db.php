@@ -70,6 +70,7 @@ class Database {
             if ($needsSeed) {
                 self::seedMysqlSchema($pdo);
             }
+            self::ensureSchemaUpgrades($pdo, 'mysql');
 
             return self::$pdo;
         } catch (Throwable $e) {
@@ -142,8 +143,27 @@ class Database {
         if ($needsSeed) {
             self::seedSqliteSchema($pdo);
         }
+        self::ensureSchemaUpgrades($pdo, 'sqlite');
 
         return self::$pdo;
+    }
+
+    private static function ensureSchemaUpgrades(PDO $pdo, string $driver): void {
+        try {
+            if ($driver === 'mysql') {
+                $cols = $pdo->query("SHOW COLUMNS FROM menu_items LIKE 'image_url'")->fetchAll();
+                if (empty($cols)) {
+                    $pdo->exec("ALTER TABLE menu_items ADD COLUMN image_url VARCHAR(255) DEFAULT '' AFTER image_emoji");
+                }
+            } else {
+                $cols = $pdo->query("PRAGMA table_info(menu_items)")->fetchAll(PDO::FETCH_COLUMN, 1);
+                if (!in_array('image_url', $cols, true)) {
+                    $pdo->exec("ALTER TABLE menu_items ADD COLUMN image_url TEXT DEFAULT ''");
+                }
+            }
+        } catch (Throwable $ignore) {
+            // Non-fatal if table does not exist yet
+        }
     }
 
     private static function seedSqliteSchema(PDO $pdo): void {
@@ -234,6 +254,7 @@ class Database {
                 low_stock_threshold INTEGER DEFAULT 20,
                 modifiers_json TEXT DEFAULT NULL,
                 image_emoji TEXT DEFAULT '🥤',
+                image_url TEXT DEFAULT '',
                 is_popular INTEGER DEFAULT 0,
                 is_available INTEGER DEFAULT 1,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP

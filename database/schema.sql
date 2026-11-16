@@ -99,6 +99,7 @@ CREATE TABLE `menu_items` (
   `low_stock_threshold` INT DEFAULT 20,
   `modifiers_json` TEXT DEFAULT NULL,
   `image_emoji` VARCHAR(20) DEFAULT '🥤',
+  `image_url` VARCHAR(255) DEFAULT '',
   `is_popular` TINYINT(1) DEFAULT 0,
   `is_available` TINYINT(1) DEFAULT 1,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

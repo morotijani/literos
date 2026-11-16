@@ -646,6 +646,44 @@ try {
             respond(['message' => 'Coffers ledger entry deleted']);
             break;
 
+        case 'upload_menu_image':
+            requireRoles($pdo, $payload, ['Admin', 'Manager']);
+            if (empty($_FILES['image']) || !isset($_FILES['image']['tmp_name'])) {
+                respond(['error' => 'No image file uploaded.'], 422);
+            }
+            $file = $_FILES['image'];
+            if ((int)$file['error'] !== UPLOAD_ERR_OK) {
+                respond(['error' => 'Image upload failed (code ' . (int)$file['error'] . ').'], 422);
+            }
+            if ((int)$file['size'] > 5 * 1024 * 1024) {
+                respond(['error' => 'Image exceeds 5 MB size limit.'], 422);
+            }
+            $imgInfo = @getimagesize($file['tmp_name']);
+            $mime = is_array($imgInfo) ? ($imgInfo['mime'] ?? '') : '';
+            $mimeMap = [
+                'image/jpeg' => 'jpg',
+                'image/png'  => 'png',
+                'image/webp' => 'webp',
+                'image/gif'  => 'gif',
+            ];
+            if (!isset($mimeMap[$mime])) {
+                respond(['error' => 'Unsupported image format. Please upload JPG, PNG, WebP, or GIF.'], 422);
+            }
+            $uploadDir = __DIR__ . '/../assets/uploads/menu';
+            if (!is_dir($uploadDir) && !mkdir($uploadDir, 0755, true)) {
+                respond(['error' => 'Failed to create menu upload directory.'], 500);
+            }
+            $fileName = 'dish_' . date('Ymd_His') . '_' . bin2hex(random_bytes(5)) . '.' . $mimeMap[$mime];
+            $destPath = $uploadDir . '/' . $fileName;
+            if (!move_uploaded_file($file['tmp_name'], $destPath)) {
+                respond(['error' => 'Failed to store uploaded image on disk.'], 500);
+            }
+            respond([
+                'image_url' => 'assets/uploads/menu/' . $fileName,
+                'message' => 'Dish image uploaded successfully'
+            ]);
+            break;
+
         case 'save_menu_item':
             requireRoles($pdo, $payload, ['Admin', 'Manager']);
             $id = (int)($payload['id'] ?? 0);
@@ -659,6 +697,10 @@ try {
             $prepTime = max(1, (int)($payload['prep_time_mins'] ?? 10));
             $stockQty = max(0, (int)($payload['stock_qty'] ?? 50));
             $emoji = trim((string)($payload['image_emoji'] ?? '🍽️')) ?: '🍽️';
+            $imageUrl = trim((string)($payload['image_url'] ?? ''));
+            if ($imageUrl !== '' && (str_contains($imageUrl, '..') || !str_starts_with($imageUrl, 'assets/uploads/menu/'))) {
+                $imageUrl = '';
+            }
             $isPopular = !empty($payload['is_popular']) ? 1 : 0;
             $isAvailable = isset($payload['is_available']) ? ((int)$payload['is_available'] ? 1 : 0) : 1;
 
@@ -682,13 +724,13 @@ try {
                     UPDATE menu_items
                     SET category_id = ?, sku = ?, name = ?, description = ?, price = ?, cost = ?,
                         course_type = ?, prep_time_mins = ?, stock_qty = ?, modifiers_json = ?,
-                        image_emoji = ?, is_popular = ?, is_available = ?
+                        image_emoji = ?, image_url = ?, is_popular = ?, is_available = ?
                     WHERE id = ?
                 ");
                 $stmt->execute([
                     $categoryId, $sku, $name, $description, $price, $cost,
                     $courseType, $prepTime, $stockQty, $modsJson,
-                    $emoji, $isPopular, $isAvailable, $id
+                    $emoji, $imageUrl, $isPopular, $isAvailable, $id
                 ]);
                 respond(['message' => "Menu item '{$name}' updated"]);
             } else {
@@ -696,13 +738,13 @@ try {
                     INSERT INTO menu_items (
                         category_id, sku, name, description, price, cost,
                         course_type, prep_time_mins, stock_qty, modifiers_json,
-                        image_emoji, is_popular, is_available
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        image_emoji, image_url, is_popular, is_available
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ");
                 $stmt->execute([
                     $categoryId, $sku, $name, $description, $price, $cost,
                     $courseType, $prepTime, $stockQty, $modsJson,
-                    $emoji, $isPopular, $isAvailable
+                    $emoji, $imageUrl, $isPopular, $isAvailable
                 ]);
                 respond(['message' => "New dish '{$name}' added to menu"]);
             }

@@ -42,9 +42,11 @@ const LiterosApp = (() => {
         // Floor Zone Filter
         floorZone: 'all',
 
-        // Menu Filter
+        // Menu Filter & Modal Visual State
         menuCategoryFilter: 'all',
         menuSearch: '',
+        menuVisualMode: 'emoji',
+        menuImageUploading: false,
 
         // Sales History Filter
         salesStatusFilter: 'all',
@@ -180,6 +182,15 @@ const LiterosApp = (() => {
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#039;');
+    }
+
+    function renderDishVisual(item, sizeClass = 'w-11 h-11 rounded-xl', emojiClass = 'text-2xl') {
+        const imgUrl = (item?.image_url || '').trim();
+        if (imgUrl) {
+            return `<img src="${escapeHtml(imgUrl)}" alt="${escapeHtml(item?.name || 'Dish')}" class="${sizeClass} object-cover border border-white/10 shrink-0">`;
+        }
+        const emoji = item?.image_emoji || item?.emoji || '🍽️';
+        return `<span class="${emojiClass} select-none leading-none">${escapeHtml(emoji)}</span>`;
     }
 
     function toast(msg, type = 'success') {
@@ -612,7 +623,7 @@ const LiterosApp = (() => {
                              class="pos-card rounded-2xl p-4 flex flex-col justify-between cursor-pointer relative overflow-hidden ${soldOut ? 'opacity-45 cursor-not-allowed' : ''}">
                             <div>
                                 <div class="flex items-start justify-between gap-2 mb-2.5">
-                                    <span class="text-3xl select-none">${escapeHtml(item.image_emoji || '🍽️')}</span>
+                                    ${renderDishVisual(item, 'w-12 h-12 rounded-xl', 'text-3xl')}
                                     <div class="flex flex-col items-end gap-1">
                                         <span class="font-mono-num text-sm font-bold text-amber-400 bg-amber-500/10 border border-amber-500/25 px-2.5 py-0.5 rounded-lg">
                                             ${money(item.price)}
@@ -675,7 +686,8 @@ const LiterosApp = (() => {
         state.pendingMenuItem = item;
         state.selectedModifiers = [];
 
-        document.getElementById('modModalDishTitle').textContent = `${item.image_emoji} ${item.name}`;
+        const titleEl = document.getElementById('modModalDishTitle');
+        titleEl.innerHTML = `<span class="inline-flex items-center gap-2">${renderDishVisual(item, 'w-7 h-7 rounded-lg', 'text-lg')}<span>${escapeHtml(item.name)}</span></span>`;
         document.getElementById('modModalDishPrice').textContent = money(item.price);
         document.getElementById('modCustomNote').value = '';
 
@@ -731,6 +743,7 @@ const LiterosApp = (() => {
                 menu_item_id: Number(item.id),
                 name: item.name,
                 emoji: item.image_emoji || '🍽️',
+                image_url: item.image_url || '',
                 unit_price: Number(item.price) + extraPrice,
                 extra_price: extraPrice,
                 quantity: 1,
@@ -816,7 +829,7 @@ const LiterosApp = (() => {
                     <div class="p-3 rounded-xl bg-slate-900/85 border border-white/5 flex items-start justify-between gap-2">
                         <div class="min-w-0 flex-1">
                             <div class="flex items-center gap-1.5">
-                                <span>${escapeHtml(item.emoji)}</span>
+                                ${renderDishVisual(item, 'w-6 h-6 rounded-md', 'text-base')}
                                 <span class="text-xs font-semibold text-white truncate">${escapeHtml(item.name)}</span>
                             </div>
                             ${item.modifiers ? `<div class="text-[11px] text-amber-400/90 mt-0.5">↳ ${escapeHtml(item.modifiers)}</div>` : ''}
@@ -1955,7 +1968,7 @@ const LiterosApp = (() => {
                 <tr class="border-b border-white/5 hover:bg-white/[0.02] transition">
                     <td class="py-3 px-4">
                         <div class="flex items-center gap-3">
-                            <span class="text-2xl">${escapeHtml(item.image_emoji)}</span>
+                            ${renderDishVisual(item, 'w-11 h-11 rounded-xl', 'text-2xl')}
                             <div>
                                 <div class="text-xs font-bold text-white">${escapeHtml(item.name)}</div>
                                 <div class="text-[11px] text-slate-400 font-mono-num">${escapeHtml(item.sku)} • ${escapeHtml(item.course_type || 'Main')}</div>
@@ -2120,10 +2133,117 @@ const LiterosApp = (() => {
         }
     }
 
+    function setMenuVisualMode(mode) {
+        state.menuVisualMode = mode === 'image' ? 'image' : 'emoji';
+        const isImg = state.menuVisualMode === 'image';
+
+        const btnEmoji = document.getElementById('btnVisualModeEmoji');
+        const btnImage = document.getElementById('btnVisualModeImage');
+        const emojiPanel = document.getElementById('menuVisualEmojiPanel');
+        const imagePanel = document.getElementById('menuVisualImagePanel');
+
+        if (btnEmoji && btnImage) {
+            btnEmoji.className = isImg
+                ? 'px-2.5 py-1 rounded-md text-[11px] font-semibold text-slate-400 hover:text-white transition'
+                : 'px-2.5 py-1 rounded-md text-[11px] font-bold bg-amber-500 text-slate-950 transition';
+            btnImage.className = isImg
+                ? 'px-2.5 py-1 rounded-md text-[11px] font-bold bg-amber-500 text-slate-950 transition'
+                : 'px-2.5 py-1 rounded-md text-[11px] font-semibold text-slate-400 hover:text-white transition';
+        }
+        if (emojiPanel) emojiPanel.classList.toggle('hidden', isImg);
+        if (imagePanel) imagePanel.classList.toggle('hidden', !isImg);
+    }
+
+    function updateMenuEmojiPreview(val) {
+        const box = document.getElementById('menuEmojiPreviewBox');
+        if (box) box.textContent = String(val || '').trim() || '🍽️';
+    }
+
+    function updateMenuImagePreview(url, statusText = null) {
+        const urlInput = document.getElementById('menuImageUrlInput');
+        const imgTag = document.getElementById('menuImagePreviewTag');
+        const placeholder = document.getElementById('menuImagePlaceholderIcon');
+        const clearBtn = document.getElementById('btnClearMenuImage');
+        const statusEl = document.getElementById('menuImageStatusText');
+
+        const cleanUrl = (url || '').trim();
+        if (urlInput) urlInput.value = cleanUrl;
+
+        if (cleanUrl) {
+            if (imgTag) {
+                imgTag.src = cleanUrl;
+                imgTag.classList.remove('hidden');
+            }
+            if (placeholder) placeholder.classList.add('hidden');
+            if (clearBtn) clearBtn.classList.remove('hidden');
+        } else {
+            if (imgTag) {
+                imgTag.src = '';
+                imgTag.classList.add('hidden');
+            }
+            if (placeholder) placeholder.classList.remove('hidden');
+            if (clearBtn) clearBtn.classList.add('hidden');
+        }
+
+        if (statusEl && statusText !== null) {
+            statusEl.textContent = statusText;
+        }
+    }
+
+    function clearMenuImage() {
+        const fileInput = document.getElementById('menuImageFileInput');
+        if (fileInput) fileInput.value = '';
+        updateMenuImagePreview('', 'JPG, PNG, WebP or GIF (max 5 MB)');
+    }
+
+    async function handleMenuImageSelect(event) {
+        const file = event.target?.files?.[0];
+        if (!file) return;
+
+        if (!file.type || !file.type.startsWith('image/')) {
+            toast('Please select a valid image file (JPG, PNG, WebP, or GIF).', 'error');
+            return;
+        }
+        if (file.size > 5 * 1024 * 1024) {
+            toast('Image size must be 5 MB or less.', 'error');
+            return;
+        }
+
+        const actorId = state.activeStaff?.id || 0;
+        const formData = new FormData();
+        formData.append('image', file);
+        if (actorId) formData.append('actor_staff_id', String(actorId));
+
+        state.menuImageUploading = true;
+        const statusEl = document.getElementById('menuImageStatusText');
+        if (statusEl) statusEl.textContent = `Uploading ${file.name}...`;
+
+        try {
+            const url = `api/index.php?action=upload_menu_image${actorId ? `&actor_staff_id=${actorId}` : ''}`;
+            const res = await fetch(url, { method: 'POST', body: formData });
+            const data = await res.json();
+            if (!res.ok || data.ok === false) {
+                throw new Error(data.error || 'Image upload failed');
+            }
+            updateMenuImagePreview(data.image_url, `Uploaded: ${file.name}`);
+            setMenuVisualMode('image');
+            toast(data.message || 'Dish image uploaded');
+        } catch (err) {
+            updateMenuImagePreview(document.getElementById('menuImageUrlInput')?.value || '', 'Upload failed — try another image');
+            toast(err.message, 'error');
+        } finally {
+            state.menuImageUploading = false;
+        }
+    }
+
     function openNewMenuModal() {
         const form = document.getElementById('menuItemForm');
         form.reset();
         form.id.value = '';
+        form.image_emoji.value = '🍽️';
+        updateMenuEmojiPreview('🍽️');
+        clearMenuImage();
+        setMenuVisualMode('emoji');
         document.getElementById('menuModalTitle').textContent = 'Create Culinary Dish';
         document.getElementById('menuItemModal').classList.remove('hidden');
     }
@@ -2142,9 +2262,22 @@ const LiterosApp = (() => {
         form.course_type.value = item.course_type;
         form.prep_time_mins.value = item.prep_time_mins;
         form.stock_qty.value = item.stock_qty;
-        form.image_emoji.value = item.image_emoji;
+        form.image_emoji.value = item.image_emoji || '🍽️';
         form.modifiers.value = (item.modifiers || []).join(', ');
         form.is_popular.checked = Number(item.is_popular) === 1;
+
+        updateMenuEmojiPreview(form.image_emoji.value);
+        const fileInput = document.getElementById('menuImageFileInput');
+        if (fileInput) fileInput.value = '';
+
+        const existingImg = (item.image_url || '').trim();
+        if (existingImg) {
+            updateMenuImagePreview(existingImg, 'Current uploaded image');
+            setMenuVisualMode('image');
+        } else {
+            clearMenuImage();
+            setMenuVisualMode('emoji');
+        }
 
         document.getElementById('menuModalTitle').textContent = `Edit Dish: ${item.name}`;
         document.getElementById('menuItemModal').classList.remove('hidden');
@@ -2152,7 +2285,17 @@ const LiterosApp = (() => {
 
     async function submitMenuItem(e) {
         e.preventDefault();
+        if (state.menuImageUploading) {
+            toast('Please wait for the dish image upload to finish.', 'warning');
+            return;
+        }
         const form = e.target;
+        const selectedImgUrl = (document.getElementById('menuImageUrlInput')?.value || '').trim();
+        if (state.menuVisualMode === 'image' && !selectedImgUrl) {
+            toast('Please upload a dish image or switch to Emoji Icon.', 'error');
+            return;
+        }
+
         const payload = {
             id: form.id.value ? Number(form.id.value) : 0,
             category_id: Number(form.category_id.value),
@@ -2164,7 +2307,8 @@ const LiterosApp = (() => {
             course_type: form.course_type.value,
             prep_time_mins: Number(form.prep_time_mins.value),
             stock_qty: Number(form.stock_qty.value),
-            image_emoji: form.image_emoji.value,
+            image_emoji: form.image_emoji.value || '🍽️',
+            image_url: state.menuVisualMode === 'image' ? selectedImgUrl : '',
             modifiers: form.modifiers.value,
             is_popular: form.is_popular.checked ? 1 : 0,
             is_available: 1
@@ -3398,6 +3542,10 @@ const LiterosApp = (() => {
         openNewMenuModal,
         editMenuItem,
         submitMenuItem,
+        setMenuVisualMode,
+        updateMenuEmojiPreview,
+        handleMenuImageSelect,
+        clearMenuImage,
         toggleAvailability,
         restockItem,
         deleteMenuItem,
