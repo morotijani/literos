@@ -104,6 +104,12 @@ try {
                 LEFT JOIN branches b ON b.id = s.branch_id
                 ORDER BY s.branch_id ASC, s.id ASC
             ")->fetchAll();
+            if (isProductionMode()) {
+                foreach ($staff as &$stRow) {
+                    $stRow['pin_code'] = '••••';
+                }
+                unset($stRow);
+            }
 
             $tablesStmt = $pdo->prepare("
                 SELECT t.*, s.full_name AS staff_name, s.avatar_color AS staff_color
@@ -286,6 +292,8 @@ try {
             ")->fetchAll();
 
             respond([
+                'app_env' => getAppEnv(),
+                'is_production' => isProductionMode(),
                 'driver' => $driver,
                 'active_branch_id' => $branchId,
                 'company' => $company,
@@ -882,13 +890,21 @@ try {
             $role = in_array($payload['role'] ?? '', ['Admin', 'Manager', 'Cashier', 'Waiter', 'Chef'], true)
                 ? $payload['role']
                 : 'Waiter';
-            $pinCode = trim((string)($payload['pin_code'] ?? '1234'));
+            $pinCode = trim((string)($payload['pin_code'] ?? ''));
             $email = trim((string)($payload['email'] ?? ''));
             $phone = trim((string)($payload['phone'] ?? ''));
             $avatarColor = trim((string)($payload['avatar_color'] ?? '#f59e0b'));
             $hourlyRate = max(0, (float)($payload['hourly_rate'] ?? 18.00));
             $commissionRate = max(0, (float)($payload['commission_rate'] ?? 2.50));
             $isActive = isset($payload['is_active']) ? ((int)$payload['is_active'] ? 1 : 0) : 1;
+
+            if ($id > 0 && ($pinCode === '' || $pinCode === '••••')) {
+                $existingPinStmt = $pdo->prepare("SELECT pin_code FROM staff WHERE id = ? LIMIT 1");
+                $existingPinStmt->execute([$id]);
+                $pinCode = (string)($existingPinStmt->fetchColumn() ?: '');
+            } elseif ($id <= 0 && ($pinCode === '' || $pinCode === '••••')) {
+                $pinCode = isProductionMode() ? '' : '1234';
+            }
 
             if ($fullName === '' || $pinCode === '') {
                 respond(['error' => 'Staff full name and POS PIN code are required'], 422);
@@ -937,7 +953,13 @@ try {
             $staffMember = $stmt->fetch();
 
             if (!$staffMember) {
-                respond(['error' => 'Invalid POS PIN code. Try 1111 (Hajia Rabi Adam), 2101 (Alhaji Ibrahim), or 2102 (Efua Owusu).'], 401);
+                $errMsg = isProductionMode()
+                    ? 'Invalid POS PIN code.'
+                    : 'Invalid POS PIN code. Try 1111 (Hajia Rabi Adam), 2101 (Zainab), or 2103 (Yasmine).';
+                respond(['error' => $errMsg], 401);
+            }
+            if (isProductionMode()) {
+                $staffMember['pin_code'] = '••••';
             }
             respond([
                 'message' => "Welcome back, {$staffMember['full_name']} ({$staffMember['role']})",
@@ -977,7 +999,13 @@ try {
 
             $staffMember = $stmt->fetch();
             if (!$staffMember) {
-                respond(['error' => 'Invalid login credentials. Click any demo credential row on the right or check your Email / Employee ID and PIN.'], 401);
+                $errMsg = isProductionMode()
+                    ? 'Invalid login credentials. Please verify your Email / Employee ID and POS PIN.'
+                    : 'Invalid login credentials. Click any demo credential row on the right or check your Email / Employee ID and PIN.';
+                respond(['error' => $errMsg], 401);
+            }
+            if (isProductionMode()) {
+                $staffMember['pin_code'] = '••••';
             }
 
             respond([

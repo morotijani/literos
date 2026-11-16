@@ -13,6 +13,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/env.php';
+
 class Database {
     private static ?PDO $pdo = null;
     private static string $driver = 'mysql';
@@ -22,11 +24,16 @@ class Database {
             return self::$pdo;
         }
 
-        $host = getenv('DB_HOST') ?: '127.0.0.1';
-        $port = getenv('DB_PORT') ?: '3306';
-        $dbName = getenv('DB_NAME') ?: 'literos';
-        $user = getenv('DB_USER') ?: 'root';
-        $pass = getenv('DB_PASS') ?: '';
+        $preferredDriver = strtolower(trim((string)env('DB_DRIVER', 'auto')));
+        if ($preferredDriver === 'sqlite') {
+            return self::getSqliteFallback();
+        }
+
+        $host = (string)env('DB_HOST', '127.0.0.1');
+        $port = (string)env('DB_PORT', '3306');
+        $dbName = (string)env('DB_NAME', 'literos');
+        $user = (string)env('DB_USER', 'root');
+        $pass = (string)env('DB_PASS', '');
 
         try {
             $dsnServer = "mysql:host={$host};port={$port};charset=utf8mb4";
@@ -75,6 +82,9 @@ class Database {
 
             return self::$pdo;
         } catch (Throwable $e) {
+            if ($preferredDriver === 'mysql') {
+                throw $e;
+            }
             return self::getSqliteFallback();
         }
     }
@@ -107,7 +117,12 @@ class Database {
     }
 
     private static function getSqliteFallback(): PDO {
-        $sqlitePath = __DIR__ . '/../database/literos_local.sqlite';
+        $sqliteConfig = trim((string)env('DB_SQLITE_PATH', 'database/literos_local.sqlite'));
+        if ($sqliteConfig === '') {
+            $sqliteConfig = 'database/literos_local.sqlite';
+        }
+        $isAbsolute = str_starts_with($sqliteConfig, '/') || (bool)preg_match('/^[A-Za-z]:[\\\\\/]/', $sqliteConfig);
+        $sqlitePath = $isAbsolute ? $sqliteConfig : (__DIR__ . '/../' . ltrim($sqliteConfig, '/\\'));
 
         $pdo = new PDO("sqlite:" . $sqlitePath, null, null, [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,

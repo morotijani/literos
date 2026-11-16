@@ -5,6 +5,9 @@
  * Interactive Table Floor Plan, Menu Studio, Staff Leaderboard & HQ Suite.
  */
 declare(strict_types=1);
+require_once __DIR__ . '/config/env.php';
+$literosAppEnv = getAppEnv();
+$literosIsProd = isProductionMode();
 ?>
 <!DOCTYPE html>
 <html lang="en" class="dark">
@@ -41,6 +44,8 @@ declare(strict_types=1);
     <!-- Custom Obsidian & Saffron Styles -->
     <link rel="stylesheet" href="assets/css/style.css">
     <script>
+        window.LITEROS_APP_ENV = <?= json_encode($literosAppEnv) ?>;
+        window.LITEROS_IS_PRODUCTION = <?= $literosIsProd ? 'true' : 'false' ?>;
         (function () {
             try {
                 const savedTheme = localStorage.getItem('literos_theme') || 'dark';
@@ -1791,7 +1796,7 @@ declare(strict_types=1);
                 </div>
                 <div>
                     <label class="block text-xs text-slate-400 mb-1">POS PIN Code</label>
-                    <input name="pin_code" required maxlength="6" placeholder="8888" class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-xs text-amber-300 font-mono-num font-bold">
+                    <input id="staffModalPinInput" name="pin_code" <?= $literosIsProd ? '' : 'required' ?> maxlength="6" placeholder="<?= $literosIsProd ? 'Enter new PIN (leave blank to keep)' : '8888' ?>" class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-xs text-amber-300 font-mono-num font-bold">
                 </div>
             </div>
 
@@ -2094,7 +2099,11 @@ declare(strict_types=1);
             </div>
             <div>
                 <h3 class="font-bold text-base text-white">Operator PIN Switch</h3>
-                <p class="text-[11px] text-slate-400 mt-1">Demo PINs: <strong class="text-amber-300">1111</strong> (Hajia Rabi), <strong class="text-emerald-300">1001</strong> (Zainab), <strong class="text-indigo-300">2001</strong> (Matilda)</p>
+                <?php if ($literosIsProd): ?>
+                    <p class="text-[11px] text-slate-400 mt-1">Enter your personal POS PIN to switch active operator</p>
+                <?php else: ?>
+                    <p class="text-[11px] text-slate-400 mt-1">Demo PINs: <strong class="text-amber-300">1111</strong> (Hajia Rabi), <strong class="text-emerald-300">1001</strong> (Zainab), <strong class="text-indigo-300">2001</strong> (Matilda)</p>
+                <?php endif; ?>
             </div>
             <input id="quickPinInput" type="password" maxlength="8" required placeholder="••••"
                    class="w-full py-3 rounded-xl bg-slate-950 border border-white/15 text-center font-mono-num text-xl tracking-widest text-white outline-none focus:border-amber-500">
@@ -2107,10 +2116,10 @@ declare(strict_types=1);
 
     <!-- 9. Full-Screen Hospitality Authentication & Operator Login Screen -->
     <div id="loginScreenOverlay" class="fixed inset-0 z-50 bg-[#07090e]/95 backdrop-blur-xl flex items-center justify-center p-4 overflow-y-auto">
-        <div class="max-w-5xl w-full grid grid-cols-1 lg:grid-cols-12 rounded-3xl overflow-hidden border border-white/15 shadow-2xl bg-[#0d111a]">
+        <div class="<?= $literosIsProd ? 'max-w-md w-full' : 'max-w-5xl w-full grid grid-cols-1 lg:grid-cols-12' ?> rounded-3xl overflow-hidden border border-white/15 shadow-2xl bg-[#0d111a]">
 
-            <!-- Left Column: Sign-In Form & Tactile PIN Keypad (5 Cols) -->
-            <div class="lg:col-span-5 p-7 sm:p-8 flex flex-col justify-between border-b lg:border-b-0 lg:border-r border-white/10 bg-gradient-to-b from-slate-900/90 to-slate-950">
+            <!-- Left Column: Sign-In Form & Tactile PIN Keypad -->
+            <div class="<?= $literosIsProd ? '' : 'lg:col-span-5 border-b lg:border-b-0 lg:border-r border-white/10' ?> p-7 sm:p-8 flex flex-col justify-between bg-gradient-to-b from-slate-900/90 to-slate-950">
                 <div>
                     <!-- Brand Header -->
                     <div class="flex items-center justify-between gap-3 mb-6">
@@ -2143,7 +2152,7 @@ declare(strict_types=1);
                                 <i class="fa-solid fa-id-card-clip absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 text-xs"></i>
                                 <input id="loginIdentifierInput"
                                        type="text"
-                                       placeholder="e.g. hajia.rabi@shakesanddessert.com.gh or SD-HQ-01"
+                                       placeholder="<?= $literosIsProd ? 'Enter your Email or Employee Code' : 'e.g. hajia.rabi@shakesanddessert.com.gh or SD-HQ-01' ?>"
                                        class="w-full pl-9 pr-3.5 py-2.5 rounded-xl bg-slate-950 border border-white/10 focus:border-amber-500 text-xs text-white outline-none">
                             </div>
                         </div>
@@ -2163,7 +2172,7 @@ declare(strict_types=1);
                                        type="password"
                                        required
                                        maxlength="10"
-                                       placeholder="Enter 4-digit PIN (e.g. 1111)"
+                                       placeholder="<?= $literosIsProd ? 'Enter your POS PIN / Password' : 'Enter 4-digit PIN (e.g. 1111)' ?>"
                                        class="w-full pl-9 pr-4 py-3 rounded-xl bg-slate-950 border border-amber-500/40 focus:border-amber-400 font-mono-num text-base tracking-widest text-white outline-none">
                             </div>
                         </div>
@@ -2193,12 +2202,13 @@ declare(strict_types=1);
                 </div>
 
                 <div class="pt-5 mt-5 border-t border-white/10 flex items-center justify-between text-[11px] text-slate-400">
-                    <span><i class="fa-solid fa-shield-halved text-emerald-400 mr-1"></i>Role-Based Shift Tracking</span>
+                    <span><i class="fa-solid fa-shield-halved text-emerald-400 mr-1"></i><?= $literosIsProd ? 'Production Security Mode' : 'Role-Based Shift Tracking' ?></span>
                     <span class="font-mono-num">Kumasi • GHS (¢)</span>
                 </div>
             </div>
 
-            <!-- Right Column: Seeded Demo Credentials Directory (7 Cols) -->
+            <?php if (!$literosIsProd): ?>
+            <!-- Right Column: Seeded Demo Credentials Directory (Development Mode Only) -->
             <div class="lg:col-span-7 p-7 sm:p-8 flex flex-col justify-between bg-[#090c14]">
                 <div>
                     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-white/10">
@@ -2230,6 +2240,7 @@ declare(strict_types=1);
                     </div>
                 </div>
             </div>
+            <?php endif; ?>
 
         </div>
     </div>

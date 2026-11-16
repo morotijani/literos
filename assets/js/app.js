@@ -6,6 +6,8 @@
 
 const LiterosApp = (() => {
     const state = {
+        appEnv: window.LITEROS_APP_ENV || 'development',
+        isProduction: Boolean(window.LITEROS_IS_PRODUCTION),
         driver: 'mysql',
         theme: 'dark',
         activeTab: 'pos',
@@ -336,6 +338,8 @@ const LiterosApp = (() => {
     async function loadBootstrap(branchId = state.activeBranchId) {
         try {
             const data = await api('bootstrap', null, `&branch_id=${branchId}`);
+            state.appEnv = data.app_env || state.appEnv;
+            state.isProduction = Boolean(data.is_production ?? state.isProduction);
             state.driver = data.driver || 'mysql';
             state.activeBranchId = Number(data.active_branch_id || 1);
             state.company = data.company || {};
@@ -500,7 +504,7 @@ const LiterosApp = (() => {
                 </span>
                 <div class="text-left leading-tight">
                     <div class="text-xs font-semibold text-white">${escapeHtml(st.full_name)}</div>
-                    <div class="text-[10px] text-amber-400 font-medium">${escapeHtml(st.role)} • PIN ${escapeHtml(st.pin_code)}</div>
+                    <div class="text-[10px] text-amber-400 font-medium">${escapeHtml(st.role)}${state.isProduction ? '' : ` • PIN ${escapeHtml(st.pin_code)}`}</div>
                 </div>
             `;
         }
@@ -2393,7 +2397,7 @@ const LiterosApp = (() => {
                                         ${isCurrent ? '<span class="px-2 py-0.5 text-[10px] rounded-md bg-amber-500 text-slate-950 font-extrabold">ACTIVE</span>' : ''}
                                     </h4>
                                     <p class="text-xs text-amber-400 font-semibold">${escapeHtml(s.role)} • ${escapeHtml(s.branch_name || '')}</p>
-                                    <p class="text-[11px] text-slate-400 font-mono-num mt-0.5">${escapeHtml(s.employee_code)} • PIN: <span class="text-white font-bold">${escapeHtml(s.pin_code)}</span></p>
+                                    <p class="text-[11px] text-slate-400 font-mono-num mt-0.5">${escapeHtml(s.employee_code)} • PIN: <span class="text-white font-bold">${state.isProduction ? '••••' : escapeHtml(s.pin_code)}</span></p>
                                 </div>
                             </div>
                         </div>
@@ -2442,6 +2446,10 @@ const LiterosApp = (() => {
         form.reset();
         form.id.value = '';
         form.branch_id.value = state.activeBranchId;
+        if (form.pin_code) {
+            form.pin_code.required = true;
+            form.pin_code.placeholder = state.isProduction ? 'Enter new operator PIN' : '8888';
+        }
         document.getElementById('staffModalTitle').textContent = 'Onboard Sales Personnel';
         document.getElementById('staffModal').classList.remove('hidden');
     }
@@ -2455,7 +2463,11 @@ const LiterosApp = (() => {
         form.employee_code.value = s.employee_code;
         form.full_name.value = s.full_name;
         form.role.value = s.role;
-        form.pin_code.value = s.pin_code;
+        if (form.pin_code) {
+            form.pin_code.value = state.isProduction ? '' : s.pin_code;
+            form.pin_code.required = !state.isProduction;
+            form.pin_code.placeholder = state.isProduction ? 'Leave blank to keep existing PIN' : '8888';
+        }
         form.email.value = s.email || '';
         form.phone.value = s.phone || '';
         form.hourly_rate.value = s.hourly_rate;
@@ -2533,7 +2545,7 @@ const LiterosApp = (() => {
         if (nameEl) nameEl.textContent = comp.name || 'Shakes and Dessert';
 
         const listEl = document.getElementById('loginDemoCredentialsList');
-        if (!listEl) return;
+        if (!listEl || state.isProduction) return;
 
         const roleBadges = {
             Admin: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
