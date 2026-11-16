@@ -3479,6 +3479,215 @@ const LiterosApp = (() => {
         toast('Filtered financial report exported to CSV');
     }
 
+    function exportFullReportPdf() {
+        if (!latestReportData || !Array.isArray(latestReportData.transactions)) {
+            toast('Please run the report first', 'warning');
+            return;
+        }
+
+        const JsPdfCtor = window.jspdf?.jsPDF;
+        if (!JsPdfCtor) {
+            toast('PDF library unavailable offline — opening Print / Save as PDF instead', 'warning');
+            window.print();
+            return;
+        }
+
+        const btn = document.getElementById('btnExportReportPdf');
+        const prevBtnHtml = btn ? btn.innerHTML : '';
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>Generating PDF...';
+        }
+
+        setTimeout(() => {
+            try {
+                const doc = new JsPdfCtor({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+                const pageW = doc.internal.pageSize.getWidth();
+                const margin = 32;
+                const k = latestReportData.kpis || {};
+                const comp = state.company || {};
+                const compName = comp.name || 'Shakes and Dessert';
+                const currencyLabel = (comp.currency_code || 'GHS').trim() || 'GHS';
+                const fmtMoney = (val) => `${currencyLabel} ${Number(val || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+                const fromDate = document.getElementById('repFromDate')?.value || 'All Start';
+                const toDate = document.getElementById('repToDate')?.value || 'Present';
+                const branchSelect = document.getElementById('repBranchSelect');
+                const branchLabel = branchSelect?.selectedOptions?.[0]?.textContent || 'All Branches';
+                const channelVal = document.getElementById('repOrderType')?.value || 'all';
+                const payVal = document.getElementById('repPaymentMethod')?.value || 'all';
+
+                // Branded Header Banner
+                doc.setFillColor(15, 23, 42);
+                doc.rect(0, 0, pageW, 74, 'F');
+                doc.setFillColor(245, 158, 11);
+                doc.rect(0, 74, pageW, 3, 'F');
+
+                doc.setTextColor(248, 250, 252);
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(16);
+                doc.text(`${compName} - Executive Financial & BI Report`, margin, 28);
+
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(9.5);
+                doc.setTextColor(251, 191, 36);
+                doc.text(`${comp.city || 'Kumasi, Ghana'}  |  Owner: ${comp.owner_name || 'Hajia Rabi Adam'}  |  Generated: ${new Date().toLocaleString()}`, margin, 45);
+
+                doc.setTextColor(203, 213, 225);
+                doc.setFontSize(8.5);
+                doc.text(`Period: ${fromDate} to ${toDate}  |  Branch: ${branchLabel}  |  Channel: ${channelVal}  |  Tender: ${payVal}  |  Matched Orders: ${Number(k.total_transactions || 0).toLocaleString()}`, margin, 61);
+
+                let cursorY = 96;
+
+                // 1. Executive KPI Summary
+                doc.setTextColor(15, 23, 42);
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(11);
+                doc.text('1. Executive Financial Summary', margin, cursorY);
+
+                doc.autoTable({
+                    startY: cursorY + 8,
+                    margin: { left: margin, right: margin },
+                    theme: 'grid',
+                    headStyles: { fillColor: [30, 41, 59], textColor: [248, 250, 252], fontSize: 8.5, fontStyle: 'bold' },
+                    bodyStyles: { fontSize: 8.5, textColor: [15, 23, 42] },
+                    head: [['Metric', 'Value', 'Metric', 'Value']],
+                    body: [
+                        ['Gross Revenue', fmtMoney(k.gross_revenue), 'Net Operating Profit', `${fmtMoney(k.net_operating_profit ?? k.gross_profit)} (${k.net_operating_margin_pct ?? 0}% Margin)`],
+                        ['Gross Profit (After COGS)', `${fmtMoney(k.gross_profit)} (${k.gross_margin_pct ?? 0}% Margin)`, 'Total Operating Expenditures', `${fmtMoney(k.total_expenditures)} (${k.expenditures_count || 0} vouchers)`],
+                        ['Total Dish COGS', fmtMoney(k.total_cogs), 'Valid / Cancelled Orders', `${Number(k.valid_orders || 0).toLocaleString()} valid / ${Number(k.cancelled_orders || 0).toLocaleString()} cancelled`],
+                        ['Average Order Value (AOV)', fmtMoney(k.avg_order_value), 'Average Daily Revenue', `${fmtMoney(k.avg_daily_revenue)} (${k.active_days_count || 0} active days)`],
+                        ['Settled (Paid) Revenue', fmtMoney(k.paid_amount), 'Unpaid / Open Tab', fmtMoney(k.unpaid_amount)],
+                    ],
+                });
+                cursorY = doc.lastAutoTable.finalY + 18;
+
+                // 2. Branch Performance & Payment Tender Breakdown
+                const branches = latestReportData.branch_performance || [];
+                if (branches.length > 0) {
+                    doc.setFont('helvetica', 'bold');
+                    doc.setFontSize(11);
+                    doc.text('2. Branch Performance Summary', margin, cursorY);
+                    doc.autoTable({
+                        startY: cursorY + 8,
+                        margin: { left: margin, right: margin },
+                        theme: 'striped',
+                        headStyles: { fillColor: [180, 83, 9], textColor: [255, 255, 255], fontSize: 8.5 },
+                        bodyStyles: { fontSize: 8.5, textColor: [15, 23, 42] },
+                        head: [['Branch', 'Orders', 'Gross Revenue', 'Expenditures', 'Share %']],
+                        body: branches.map(b => {
+                            const rev = Number(b.gross_revenue || 0);
+                            const share = k.gross_revenue > 0 ? ((rev / k.gross_revenue) * 100).toFixed(1) + '%' : '0.0%';
+                            return [b.branch_name || b.branch_code || 'Branch', Number(b.orders_count || 0).toLocaleString(), fmtMoney(rev), fmtMoney(b.expenditures || 0), share];
+                        }),
+                    });
+                    cursorY = doc.lastAutoTable.finalY + 18;
+                }
+
+                const payRows = (latestReportData.payment_breakdown || []).filter(p => Number(p.count || 0) > 0 || Number(p.amount || 0) > 0);
+                if (payRows.length > 0) {
+                    doc.setFont('helvetica', 'bold');
+                    doc.setFontSize(11);
+                    doc.text('3. Payment Tender Breakdown', margin, cursorY);
+                    doc.autoTable({
+                        startY: cursorY + 8,
+                        margin: { left: margin, right: margin },
+                        theme: 'striped',
+                        headStyles: { fillColor: [15, 23, 42], textColor: [248, 250, 252], fontSize: 8.5 },
+                        bodyStyles: { fontSize: 8.5, textColor: [15, 23, 42] },
+                        head: [['Payment Method', 'Transactions', 'Total Collected', 'Share %']],
+                        body: payRows.map(p => {
+                            const amt = Number(p.amount || 0);
+                            const share = k.gross_revenue > 0 ? ((amt / k.gross_revenue) * 100).toFixed(1) + '%' : '0.0%';
+                            return [p.method, Number(p.count || 0).toLocaleString(), fmtMoney(amt), share];
+                        }),
+                    });
+                    cursorY = doc.lastAutoTable.finalY + 18;
+                }
+
+                // 4. Top Selling Menu Items (Top 15)
+                const topItems = (latestReportData.top_items || []).slice(0, 15);
+                if (topItems.length > 0) {
+                    doc.setFont('helvetica', 'bold');
+                    doc.setFontSize(11);
+                    doc.text('4. Top Selling Menu Items (Top 15)', margin, cursorY);
+                    doc.autoTable({
+                        startY: cursorY + 8,
+                        margin: { left: margin, right: margin },
+                        theme: 'striped',
+                        headStyles: { fillColor: [4, 120, 87], textColor: [255, 255, 255], fontSize: 8.5 },
+                        bodyStyles: { fontSize: 8, textColor: [15, 23, 42] },
+                        head: [['#', 'Menu Item', 'Category', 'Units Sold', 'Revenue', 'Profit']],
+                        body: topItems.map((it, idx) => [
+                            idx + 1,
+                            it.item_name,
+                            it.category_name || 'General',
+                            Number(it.qty || 0).toLocaleString(),
+                            fmtMoney(it.revenue),
+                            fmtMoney(it.profit),
+                        ]),
+                    });
+                    cursorY = doc.lastAutoTable.finalY + 18;
+                }
+
+                // 5. Detailed Sales Orders Ledger
+                const txList = latestReportData.transactions || [];
+                doc.addPage();
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(11);
+                doc.setTextColor(15, 23, 42);
+                doc.text(`5. Detailed Sales Orders & Transactions Ledger (${txList.length.toLocaleString()} Records)`, margin, 36);
+
+                doc.autoTable({
+                    startY: 46,
+                    margin: { left: margin, right: margin, bottom: 34 },
+                    theme: 'grid',
+                    headStyles: { fillColor: [15, 23, 42], textColor: [248, 250, 252], fontSize: 7.5, fontStyle: 'bold' },
+                    bodyStyles: { fontSize: 7.2, textColor: [15, 23, 42], cellPadding: 3.5 },
+                    alternateRowStyles: { fillColor: [248, 250, 252] },
+                    head: [['Order #', 'Date & Time', 'Branch', 'Customer', 'Channel', 'Staff', 'Tender', 'Status', 'Items', 'COGS', 'Gross Profit', 'Total']],
+                    body: txList.map(o => [
+                        o.order_number,
+                        o.created_at,
+                        o.branch_code || o.branch_name || '',
+                        o.customer_name || 'Walk-in',
+                        o.order_type || '',
+                        o.staff_name || '',
+                        o.payment_method || '',
+                        `${o.status || ''}/${o.payment_status || ''}`,
+                        o.items_count || 0,
+                        fmtMoney(o.order_cogs || 0),
+                        fmtMoney(o.gross_profit || 0),
+                        fmtMoney(o.total_amount || 0),
+                    ]),
+                });
+
+                // Page Footer Numbering
+                const pageCount = doc.internal.getNumberOfPages();
+                const pageH = doc.internal.pageSize.getHeight();
+                for (let p = 1; p <= pageCount; p++) {
+                    doc.setPage(p);
+                    doc.setFont('helvetica', 'normal');
+                    doc.setFontSize(8);
+                    doc.setTextColor(100, 116, 139);
+                    doc.text(`${compName} | LITEROS BI Report`, margin, pageH - 16);
+                    doc.text(`Page ${p} of ${pageCount}`, pageW - margin, pageH - 16, { align: 'right' });
+                }
+
+                const slug = compName.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'literos';
+                doc.save(`${slug}_financial_report_${new Date().toISOString().slice(0, 10)}.pdf`);
+                toast(`Exported ${txList.length.toLocaleString()} transactions to PDF`);
+            } catch (err) {
+                toast(`PDF export error: ${err.message}`, 'error');
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = prevBtnHtml;
+                }
+            }
+        }, 25);
+    }
+
     // =========================================================================
     // MODALS, CLOCK & KEYBOARD SHORTCUTS
     // =========================================================================
@@ -3604,6 +3813,7 @@ const LiterosApp = (() => {
         setReportPage,
         setReportPageSize,
         exportFullReportCsv,
+        exportFullReportPdf,
         openModal,
         closeModal,
         setSalesStatusFilter: (st) => { state.salesStatusFilter = st; renderSalesView(); },

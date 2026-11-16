@@ -67,7 +67,9 @@ class Database {
                     $sawClosureCount = (int)$pdo->query("SELECT COUNT(*) FROM orders WHERE branch_id = 2 AND created_at >= '2024-11-01 00:00:00' AND created_at <= '2025-11-30 23:59:59'")->fetchColumn();
                     $recentSlumpAvg = (float)$pdo->query("SELECT COALESCE(SUM(total_amount), 0) / 75.0 FROM orders WHERE created_at >= '2026-09-01 00:00:00' AND created_at <= '2026-11-14 23:59:59'")->fetchColumn();
                     $otherExpCount = (int)$pdo->query("SELECT COUNT(*) FROM expenditures WHERE category = 'Other'")->fetchColumn();
-                    if ($compName !== 'Shakes and Dessert' || $orderCount < 4500 || $catCount < 11 || $coffersCount < 20 || $taxTipSum > 0 || $oldSeed > 0 || $decBreakMax > 3500 || $sawClosureCount > 0 || $recentSlumpAvg > 42000 || $otherExpCount === 0) {
+                    $walkInCount = (int)$pdo->query("SELECT COUNT(*) FROM orders WHERE customer_name = 'Walk-in Customer'")->fetchColumn();
+                    $smallOrderCount = (int)$pdo->query("SELECT COUNT(*) FROM orders WHERE total_amount >= 300 AND total_amount <= 900")->fetchColumn();
+                    if ($compName !== 'Shakes and Dessert' || $orderCount < 18500 || $catCount < 11 || $coffersCount < 20 || $taxTipSum > 0 || $oldSeed > 0 || $decBreakMax > 3500 || $sawClosureCount > 0 || $recentSlumpAvg > 42000 || $otherExpCount === 0 || $walkInCount < 4000 || $smallOrderCount < 2500) {
                         $needsSeed = true;
                     }
                 }
@@ -149,7 +151,9 @@ class Database {
                 $sawClosureCount = (int)$pdo->query("SELECT COUNT(*) FROM orders WHERE branch_id = 2 AND created_at >= '2024-11-01 00:00:00' AND created_at <= '2025-11-30 23:59:59'")->fetchColumn();
                 $recentSlumpAvg = (float)$pdo->query("SELECT COALESCE(SUM(total_amount), 0) / 75.0 FROM orders WHERE created_at >= '2026-09-01 00:00:00' AND created_at <= '2026-11-14 23:59:59'")->fetchColumn();
                 $otherExpCount = (int)$pdo->query("SELECT COUNT(*) FROM expenditures WHERE category = 'Other'")->fetchColumn();
-                if ($compName !== 'Shakes and Dessert' || $orderCount < 4500 || $catCount < 11 || $coffersCount < 20 || $taxTipSum > 0 || $oldSeed > 0 || $decBreakMax > 3500 || $sawClosureCount > 0 || $recentSlumpAvg > 42000 || $otherExpCount === 0) {
+                $walkInCount = (int)$pdo->query("SELECT COUNT(*) FROM orders WHERE customer_name = 'Walk-in Customer'")->fetchColumn();
+                $smallOrderCount = (int)$pdo->query("SELECT COUNT(*) FROM orders WHERE total_amount >= 300 AND total_amount <= 900")->fetchColumn();
+                if ($compName !== 'Shakes and Dessert' || $orderCount < 18500 || $catCount < 11 || $coffersCount < 20 || $taxTipSum > 0 || $oldSeed > 0 || $decBreakMax > 3500 || $sawClosureCount > 0 || $recentSlumpAvg > 42000 || $otherExpCount === 0 || $walkInCount < 4000 || $smallOrderCount < 2500) {
                     $needsSeed = true;
                 }
             }
@@ -449,13 +453,13 @@ class Database {
             ],
         ];
 
+        // Remaining ~10% named customers (90% are Walk-in Customer)
         $customerNames = [
-            'KNUST Graduating Class Group', 'Nana Kwame & Friends', 'Hajia Zainab Family Table',
-            'Ayiduase Hostel Fiesta', 'Dr. Boateng Family', 'Kumasi Mall Shoppers',
-            'Sawaba Youth Fellowship', 'Dechemso Executive Lounge', 'Ashanti Gold Corporate Team',
-            'Osei Tutu Hall Alumni', "Queen Mother's Entourage", 'Kofi & Ama Anniversary',
-            'Tech Junction Takeout Batch', 'Bantama Social Club', 'Adum Business Group',
-            'KNUST SRC Catering Order', 'Suame Magazine Engineers', 'Airport Residential Guests'
+            'Kwame Boateng', 'Abena Mensah', 'Kofi Asante', 'Akosua Serwaa',
+            'Yaw Osei', 'Efua Owusu', 'Nana Ama Bonsu', 'Kojo Appiah',
+            'Adwoa Darko', 'Esi Ansah', 'Dr. Boateng Family', 'Hajia Zainab Table',
+            'Kofi & Ama', 'Nana Kwame & Friends', 'KNUST Graduating Group',
+            'Bantama Social Club', 'Adum Corporate Team', 'Airport Residential Guests'
         ];
 
         // PDF sales report shows Dine-In dominates (~80%), supplemented by Takeaway & Delivery
@@ -684,17 +688,48 @@ class Database {
                     }
                 }
 
-                // Realistic multi-shift ticket batching:
-                // - Dechemso break: 1 batch (or 3 orders on May 17 matching PDF GHS 1,800.00)
-                // - Normal weekdays: 2 shift sessions; Weekends: 3 sessions (4 on Dechemso Nov 2025 - Apr 2026 PDF weekends)
+                // Realistic customer-level order splitting preserving exact $branchDailyTarget:
+                // - ~20% small counter/walk-in orders strictly in GHS 300 - 900 (~GHS 600 avg)
+                // - ~45% medium table orders (GHS 1,400 - 3,800)
+                // - ~35% larger group/table orders (GHS 4,000+)
                 if ($inDechemsoBreak) {
                     $numOrders = ($dateStr === '2026-05-17') ? 3 : 1;
-                } elseif ($isWeekend) {
-                    $numOrders = ($bId === 3 && $dateStr >= '2025-11-01' && $dateStr <= '2026-04-30') ? 4 : 3;
+                    $orderTargets = array_fill(0, $numOrders, $branchDailyTarget / $numOrders);
                 } else {
-                    $numOrders = 2;
+                    $numOrders = max(3, (int)round($branchDailyTarget / 2850));
+                    $smallCount = (int)round($numOrders * 0.20);
+                    if ($smallCount === 0 && mt_rand(1, 100) <= 20) {
+                        $smallCount = 1;
+                    }
+                    $smallCount = min($smallCount, max(0, $numOrders - 2));
+
+                    $smallTargets = [];
+                    $smallSum = 0.0;
+                    for ($s = 0; $s < $smallCount; $s++) {
+                        $st = (float)mt_rand(340, 820);
+                        $smallTargets[] = $st;
+                        $smallSum += $st;
+                    }
+
+                    $restCount = max(1, $numOrders - $smallCount);
+                    $remDailyTarget = max(1000.0 * $restCount, $branchDailyTarget - $smallSum);
+                    $rawWeights = [];
+                    $weightSum = 0.0;
+                    for ($w = 0; $w < $restCount; $w++) {
+                        // ~44% of remaining (~35% of total) larger orders (4,000+), ~56% medium orders
+                        $wt = (mt_rand(1, 100) <= 44)
+                            ? (mt_rand(118, 148) / 100.0)
+                            : (mt_rand(46, 78) / 100.0);
+                        $rawWeights[] = $wt;
+                        $weightSum += $wt;
+                    }
+
+                    $orderTargets = $smallTargets;
+                    foreach ($rawWeights as $wt) {
+                        $orderTargets[] = ($remDailyTarget * ($wt / $weightSum));
+                    }
+                    shuffle($orderTargets);
                 }
-                $targetPerOrder = $branchDailyTarget / $numOrders;
 
                 for ($k = 0; $k < $numOrders; $k++) {
                     $orderSeq++;
@@ -713,10 +748,15 @@ class Database {
                     $waiterId = $bCfg['waiters'][array_rand($bCfg['waiters'])];
                     $tableId = $bCfg['tables'][array_rand($bCfg['tables'])];
 
+                    $custName = (mt_rand(1, 100) <= 90)
+                        ? 'Walk-in Customer'
+                        : $customerNames[array_rand($customerNames)];
+
+                    $lineItemsToInsert = [];
+
                     if ($inDechemsoBreak) {
                         // Small break-period takeaway/delivery sales of Loaded Fries ONLY (GHS 1,500.00 - GHS 3,000.00/day)
                         $ordType = (mt_rand(1, 100) <= 70) ? 'Takeaway' : 'Delivery';
-                        $custName = 'Dechemso Break-Period Loaded Fries Takeaway';
                         $guests = mt_rand(2, 6);
                         $orderNote = 'Incident closure break (May 2 - late July 2026): small Loaded Fries sales only';
 
@@ -727,7 +767,7 @@ class Database {
                             // Exact PDF match for 17 May 2026 (3 orders totaling GHS 1,800.00 in Loaded Fries)
                             $may17Splits = [
                                 [2, 0], // 2 x 150 = 300
-                                [4, 0], // 4 x 150 = 600 (single Loaded Fries 150 batch)
+                                [4, 0], // 4 x 150 = 600
                                 [0, 5], // 5 x 180 = 900 -> 300 + 600 + 900 = GHS 1,800.00
                             ];
                             [$qty1, $qty2] = $may17Splits[$k];
@@ -739,53 +779,92 @@ class Database {
                             $qty2 = ($minQty2 <= $maxQty2) ? mt_rand($minQty2, $maxQty2) : $minQty2;
                         }
 
-                        $line1 = round($qty1 * $m1['price'], 2);
-                        $line2 = round($qty2 * $m2['price'], 2);
-                        $itemId1 = 65;
-                        $itemId2 = 66;
+                        if ($qty1 > 0) {
+                            $lineItemsToInsert[] = [65, $m1, $qty1, round($qty1 * $m1['price'], 2)];
+                        }
+                        if ($qty2 > 0) {
+                            $lineItemsToInsert[] = [66, $m2, $qty2, round($qty2 * $m2['price'], 2)];
+                        }
                     } else {
                         $ordType = $orderTypes[array_rand($orderTypes)];
-                        $custName = $customerNames[array_rand($customerNames)];
-                        $guests = mt_rand(3, 14);
-                        $orderNote = ($k === 0)
-                            ? 'Midday / Afternoon Lounge Session'
-                            : (($k === $numOrders - 1) ? 'Evening Peak Service Batch' : 'Peak Lounge Service Batch');
+                        $targetSubtotal = (float)$orderTargets[$k];
+                        $guests = ($targetSubtotal >= 4000) ? mt_rand(6, 16) : mt_rand(1, 6);
+                        $orderNote = ($targetSubtotal >= 4000)
+                            ? 'Group / Event Table Order'
+                            : (($ordType === 'Dine-In') ? 'Dine-In Customer Order' : "{$ordType} Counter Order");
 
-                        // Pick 2 menu items weighted toward Top Sellers & PDF core price tiers (60/80/150/180):
-                        // Crazy Shakes (22..27), SD Special (28), Loaded Fries 150 & 180 (65, 66), Milkshakes (16..21), Slushies/Mocktails (48..64)
+                        // Pick 4 distinct menu items (>= 50 GHc) weighted toward Crazy Shakes, Loaded Fries 150/180 & core PDF items
+                        // Splitting across 4 items keeps per-item quantities small and realistic!
                         $crazyShakeIds = [22, 23, 24, 25, 26, 27, 28];
                         $loadedFriesIds = [65, 66];
-                        $pdfCoreMixIds = [4, 10, 13, 14, 16, 17, 18, 19, 20, 21, 29, 30, 38, 42, 43, 48, 55, 57, 58, 67, 69];
+                        $pdfCoreMixIds = [4, 10, 11, 13, 14, 16, 17, 18, 19, 20, 21, 29, 30, 38, 42, 43, 48, 55, 57, 58, 67, 69];
 
-                        if (mt_rand(1, 100) <= 65) {
-                            $itemId1 = $crazyShakeIds[array_rand($crazyShakeIds)];
+                        $pickedIds = [];
+                        if ($targetSubtotal <= 900) {
+                            // Small counter/walk-in order (GHS 300 - 900): 2 distinct items with 1-5 qty each
+                            $pickedIds[] = $pdfCoreMixIds[array_rand($pdfCoreMixIds)];
+                            $secondPool = (mt_rand(1, 100) <= 50) ? $crazyShakeIds : $loadedFriesIds;
+                            $cand2 = $secondPool[array_rand($secondPool)];
+                            if ($cand2 === $pickedIds[0]) {
+                                $cand2 = $pdfCoreMixIds[array_rand($pdfCoreMixIds)];
+                            }
+                            $pickedIds[] = $cand2;
+
+                            $m1Info = $menuCatalog[$pickedIds[0]];
+                            $m2Info = $menuCatalog[$pickedIds[1]];
+                            $qty1 = max(1, (int)round(($targetSubtotal * 0.45) / $m1Info['price']));
+                            $sub1 = round($qty1 * $m1Info['price'], 2);
+                            $remSmall = max(300.0 - $sub1, min(900.0 - $sub1, $targetSubtotal - $sub1));
+                            $qty2 = max(1, (int)round($remSmall / $m2Info['price']));
+                            if (($sub1 + $qty2 * $m2Info['price']) > 900) {
+                                $qty2 = max(1, (int)floor((900 - $sub1) / $m2Info['price']));
+                            }
+                            if (($sub1 + $qty2 * $m2Info['price']) < 300) {
+                                $qty2 = max(1, (int)ceil((300 - $sub1) / $m2Info['price']));
+                            }
+                            $sub2 = round($qty2 * $m2Info['price'], 2);
+                            $lineItemsToInsert[] = [$pickedIds[0], $m1Info, $qty1, $sub1];
+                            $lineItemsToInsert[] = [$pickedIds[1], $m2Info, $qty2, $sub2];
                         } else {
-                            $itemId1 = $pdfCoreMixIds[array_rand($pdfCoreMixIds)];
+                            // Medium/group order: 4 distinct items (>= 50 GHc) keeps per-item quantities small and realistic!
+                            $pickedIds[] = $crazyShakeIds[array_rand($crazyShakeIds)];
+                            $pickedIds[] = $loadedFriesIds[array_rand($loadedFriesIds)];
+                            $guard = 0;
+                            while (count($pickedIds) < 4 && $guard < 20) {
+                                $guard++;
+                                $cand = (mt_rand(1, 100) <= 75)
+                                    ? $pdfCoreMixIds[array_rand($pdfCoreMixIds)]
+                                    : $crazyShakeIds[array_rand($crazyShakeIds)];
+                                if (!in_array($cand, $pickedIds, true)) {
+                                    $pickedIds[] = $cand;
+                                }
+                            }
+
+                            $shares = [0.30, 0.28, 0.22, 0.20];
+                            $remainingSub = $targetSubtotal;
+                            $numPicked = count($pickedIds);
+                            for ($pIdx = 0; $pIdx < $numPicked; $pIdx++) {
+                                $mId = $pickedIds[$pIdx];
+                                $mInfo = $menuCatalog[$mId];
+                                if ($pIdx === $numPicked - 1) {
+                                    $alloc = max($mInfo['price'], $remainingSub);
+                                } else {
+                                    $alloc = $targetSubtotal * ($shares[$pIdx] ?? (1.0 / $numPicked));
+                                }
+                                $qty = max(1, (int)round($alloc / $mInfo['price']));
+                                $lineSub = round($qty * $mInfo['price'], 2);
+                                $remainingSub -= $lineSub;
+                                $lineItemsToInsert[] = [$mId, $mInfo, $qty, $lineSub];
+                            }
                         }
-
-                        $r2 = mt_rand(1, 100);
-                        if ($r2 <= 58) {
-                            $itemId2 = $loadedFriesIds[array_rand($loadedFriesIds)];
-                        } elseif ($r2 <= 86) {
-                            $itemId2 = $pdfCoreMixIds[array_rand($pdfCoreMixIds)];
-                        } else {
-                            $itemId2 = $menuIds[mt_rand(0, max(0, $menuCount - 1))];
-                        }
-                        $m1 = $menuCatalog[$itemId1];
-                        $m2 = $menuCatalog[$itemId2];
-
-                        $targetSubtotal = $targetPerOrder;
-                        $halfSub = $targetSubtotal * 0.52;
-                        $qty1 = max(1, (int)round($halfSub / $m1['price']));
-                        $line1 = round($qty1 * $m1['price'], 2);
-
-                        $remSub = max($m2['price'], $targetSubtotal - $line1);
-                        $qty2 = max(1, (int)round($remSub / $m2['price']));
-                        $line2 = round($qty2 * $m2['price'], 2);
                     }
 
                     // Shakes and Dessert: 0.00 Taxes, 0.00 Service Charge, 0.00 Tips
-                    $subtotal = round($line1 + $line2, 2);
+                    $subtotal = 0.0;
+                    foreach ($lineItemsToInsert as $li) {
+                        $subtotal += $li[3];
+                    }
+                    $subtotal = round($subtotal, 2);
                     $discount = 0.00;
                     $taxAmt = 0.00;
                     $svcAmt = 0.00;
@@ -794,7 +873,7 @@ class Database {
 
                     $hour = $inDechemsoBreak
                         ? mt_rand(13, 18)
-                        : ($k === 0 ? mt_rand(11, 14) : ($k === 1 ? mt_rand(15, 18) : mt_rand(19, 22)));
+                        : min(22, 10 + (int)floor(($k / max(1, $numOrders)) * 12) + mt_rand(0, 1));
                     $min = mt_rand(10, 58);
                     $createdAt = sprintf('%s %02d:%02d:00', $dateStr, $hour, $min);
                     $completedAt = sprintf('%s %02d:%02d:00', $dateStr, min(23, $hour + 1), $min);
@@ -808,16 +887,10 @@ class Database {
 
                     $currentOrderId = (int)$pdo->lastInsertId();
 
-                    if ($qty1 > 0) {
+                    foreach ($lineItemsToInsert as $li) {
                         $insItem->execute([
-                            $currentOrderId, $itemId1, $m1['name'], $m1['price'], $m1['cost'],
-                            $qty1, '', $line1, 'Plated'
-                        ]);
-                    }
-                    if ($qty2 > 0) {
-                        $insItem->execute([
-                            $currentOrderId, $itemId2, $m2['name'], $m2['price'], $m2['cost'],
-                            $qty2, '', $line2, 'Plated'
+                            $currentOrderId, $li[0], $li[1]['name'], $li[1]['price'], $li[1]['cost'],
+                            $li[2], '', $li[3], 'Plated'
                         ]);
                     }
                 }

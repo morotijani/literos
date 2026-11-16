@@ -57,6 +57,10 @@ $literosIsProd = isProductionMode();
 
     <!-- Chart.js 4 for Interactive Financial & Analytical Charts -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+    <!-- jsPDF & AutoTable for Direct PDF Financial Report Export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 </head>
 <body class="min-h-screen flex flex-col bg-[#090b10] text-slate-100 select-none">
 
@@ -889,6 +893,10 @@ $literosIsProd = isProductionMode();
                         <button onclick="LiterosApp.exportFullReportCsv()"
                                 class="px-3.5 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500 text-emerald-300 hover:text-slate-950 border border-emerald-500/40 text-xs font-bold flex items-center gap-1.5 transition">
                             <i class="fa-solid fa-file-csv"></i>Export CSV
+                        </button>
+                        <button id="btnExportReportPdf" onclick="LiterosApp.exportFullReportPdf()"
+                                class="px-3.5 py-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-500 text-rose-300 hover:text-white border border-rose-500/40 text-xs font-bold flex items-center gap-1.5 transition">
+                            <i class="fa-solid fa-file-pdf"></i>Export PDF
                         </button>
                         <button onclick="window.print()"
                                 class="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-extrabold flex items-center gap-1.5 transition">
