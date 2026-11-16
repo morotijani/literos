@@ -59,7 +59,8 @@ class Database {
                     $decBreakMax = (float)$pdo->query("SELECT COALESCE(MAX(total_amount), 0) FROM orders WHERE branch_id = 3 AND created_at >= '2026-05-02 00:00:00' AND created_at <= '2026-07-26 23:59:59'")->fetchColumn();
                     $sawClosureCount = (int)$pdo->query("SELECT COUNT(*) FROM orders WHERE branch_id = 2 AND created_at >= '2024-11-01 00:00:00' AND created_at <= '2025-11-30 23:59:59'")->fetchColumn();
                     $recentSlumpAvg = (float)$pdo->query("SELECT COALESCE(SUM(total_amount), 0) / 75.0 FROM orders WHERE created_at >= '2026-09-01 00:00:00' AND created_at <= '2026-11-14 23:59:59'")->fetchColumn();
-                    if ($compName !== 'Shakes and Dessert' || $orderCount < 500 || $catCount < 11 || $coffersCount < 20 || $taxTipSum > 0 || $oldSeed > 0 || $decBreakMax > 3500 || $sawClosureCount > 0 || $recentSlumpAvg > 42000) {
+                    $otherExpCount = (int)$pdo->query("SELECT COUNT(*) FROM expenditures WHERE category = 'Other'")->fetchColumn();
+                    if ($compName !== 'Shakes and Dessert' || $orderCount < 500 || $catCount < 11 || $coffersCount < 20 || $taxTipSum > 0 || $oldSeed > 0 || $decBreakMax > 3500 || $sawClosureCount > 0 || $recentSlumpAvg > 42000 || $otherExpCount === 0) {
                         $needsSeed = true;
                     }
                 }
@@ -132,7 +133,8 @@ class Database {
                 $decBreakMax = (float)$pdo->query("SELECT COALESCE(MAX(total_amount), 0) FROM orders WHERE branch_id = 3 AND created_at >= '2026-05-02 00:00:00' AND created_at <= '2026-07-26 23:59:59'")->fetchColumn();
                 $sawClosureCount = (int)$pdo->query("SELECT COUNT(*) FROM orders WHERE branch_id = 2 AND created_at >= '2024-11-01 00:00:00' AND created_at <= '2025-11-30 23:59:59'")->fetchColumn();
                 $recentSlumpAvg = (float)$pdo->query("SELECT COALESCE(SUM(total_amount), 0) / 75.0 FROM orders WHERE created_at >= '2026-09-01 00:00:00' AND created_at <= '2026-11-14 23:59:59'")->fetchColumn();
-                if ($compName !== 'Shakes and Dessert' || $orderCount < 500 || $catCount < 11 || $coffersCount < 20 || $taxTipSum > 0 || $oldSeed > 0 || $decBreakMax > 3500 || $sawClosureCount > 0 || $recentSlumpAvg > 42000) {
+                $otherExpCount = (int)$pdo->query("SELECT COUNT(*) FROM expenditures WHERE category = 'Other'")->fetchColumn();
+                if ($compName !== 'Shakes and Dessert' || $orderCount < 500 || $catCount < 11 || $coffersCount < 20 || $taxTipSum > 0 || $oldSeed > 0 || $decBreakMax > 3500 || $sawClosureCount > 0 || $recentSlumpAvg > 42000 || $otherExpCount === 0) {
                     $needsSeed = true;
                 }
             }
@@ -541,6 +543,14 @@ class Database {
             ['cat' => 'Equipment & Maintenance', 'title' => 'Commercial Blender, Gelato Freezer & Waffle Iron Servicing', 'vendor' => 'Suame Tech Cold-Chain Services', 'method' => 'Cash', 'min' => 1500, 'max' => 4200],
         ];
 
+        $otherExpenseTemplates = [
+            ['title' => 'Miscellaneous Petty Cash & Dispatch Rider Stipends', 'method' => 'Cash', 'min' => 650, 'max' => 1450],
+            ['title' => 'KMA Market Levy, Refuse & Sanitation Clearance Fee', 'method' => 'MoMo', 'min' => 450, 'max' => 950],
+            ['title' => 'Emergency Errand Transport, Courier & Fuel Payout', 'method' => 'Cash', 'min' => 350, 'max' => 850],
+            ['title' => 'Branch Promotional Flyers & Local Community Sponsorship', 'method' => 'MoMo', 'min' => 800, 'max' => 1900],
+            ['title' => 'Staff Emergency Support & Shift Refreshment Allowance', 'method' => 'Cash', 'min' => 500, 'max' => 1200],
+        ];
+
         while ($currDate <= $endDate) {
             $year = (int)$currDate->format('Y');
             $month = (int)$currDate->format('n');
@@ -796,11 +806,27 @@ class Database {
                 }
             }
 
+            // Seed periodic "Other" miscellaneous expenses (no supplier/approval fields)
+            $dayOfMonth = (int)$currDate->format('j');
+            if ($dayOfMonth === 6 || $dayOfMonth === 19 || $dayOfMonth === 28) {
+                $otherBranchId = (($month + $dayOfMonth) % 3) + 1;
+                if (($otherBranchId === 2 && $isSawabaClosurePeriod) || ($otherBranchId === 3 && $isDechemsoBreakPeriod)) {
+                    $otherBranchId = 1;
+                }
+                $oTpl = $otherExpenseTemplates[($month + $dayOfMonth + $year) % count($otherExpenseTemplates)];
+                $expSeq++;
+                $scale = ($year === 2026) ? 0.85 : 1.0;
+                $oAmt = round(mt_rand($oTpl['min'], $oTpl['max']) * $scale, 2);
+                $insExp->execute([
+                    'EXP-' . $expSeq, $otherBranchId, $branchConfig[$otherBranchId]['manager'], 'Other',
+                    $oTpl['title'], '', $oTpl['method'], $oAmt, $dateStr, '', $dateStr . ' 13:15:00'
+                ]);
+            }
+
             // Seed Monthly Finance & Coffers Entries:
             // 1) Market / Goods Withdrawals (~GHS 8,500+ to GHS 10,600 per month split across 2 market trips on day 3 and day 17)
             // 2) Normal Withdrawals (on day 10 and day 25)
             // 3) Periodic Manual Coffer Deposits (on day 14 of quarterly/event months)
-            $dayOfMonth = (int)$currDate->format('j');
             if ($dayOfMonth === 3) {
                 // First monthly market & ingredients purchase withdrawal (~GHS 4,600 - 5,600)
                 $cofferSeq++;

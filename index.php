@@ -614,6 +614,7 @@ declare(strict_types=1);
                                 <option value="Utilities & Generator Fuel">Utilities & Generator Fuel</option>
                                 <option value="Equipment & Maintenance">Equipment & Maintenance</option>
                                 <option value="Staff Welfare & Logistics">Staff Welfare & Logistics</option>
+                                <option value="Other">Other</option>
                             </select>
                             <select onchange="LiterosApp.setExpenditureMethodFilter(this.value)"
                                     class="px-3.5 py-2 rounded-xl bg-slate-900 border border-white/10 text-xs text-slate-200 outline-none">
@@ -1937,7 +1938,7 @@ declare(strict_types=1);
                 </div>
                 <div>
                     <label class="block text-xs text-slate-400 mb-1">Expense Category</label>
-                    <select name="category" class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-xs text-white">
+                    <select name="category" onchange="LiterosApp.handleExpenditureCategoryChange(this.value)" class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-xs text-white">
                         <option value="Ingredients & Dairy">Ingredients & Dairy</option>
                         <option value="Fruits, Nuts & Toppings">Fruits, Nuts & Toppings</option>
                         <option value="Meat & Shawarma Supplies">Meat & Shawarma Supplies</option>
@@ -1945,6 +1946,7 @@ declare(strict_types=1);
                         <option value="Utilities & Generator Fuel">Utilities & Generator Fuel</option>
                         <option value="Equipment & Maintenance">Equipment & Maintenance</option>
                         <option value="Staff Welfare & Logistics">Staff Welfare & Logistics</option>
+                        <option value="Other">Other</option>
                     </select>
                 </div>
             </div>
@@ -1977,7 +1979,7 @@ declare(strict_types=1);
                 </div>
             </div>
 
-            <div class="grid grid-cols-2 gap-3">
+            <div id="expVendorApprovalRow" class="grid grid-cols-2 gap-3">
                 <div>
                     <label class="block text-xs text-slate-400 mb-1">Supplier / Vendor Name</label>
                     <input name="vendor_name" placeholder="e.g. Kumasi ColdStore & Dairy Ltd"

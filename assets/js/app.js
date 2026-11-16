@@ -1377,7 +1377,7 @@ const LiterosApp = (() => {
                     </td>
                     <td class="py-3.5 px-4">
                         <div class="text-xs font-semibold text-white">${escapeHtml(e.title)}</div>
-                        <div class="text-[11px] text-slate-400">${escapeHtml(e.vendor_name || 'Direct Vendor')} ${e.notes ? `• ${escapeHtml(e.notes)}` : ''}</div>
+                        <div class="text-[11px] text-slate-400">${escapeHtml(e.vendor_name || (e.category === 'Other' ? 'Miscellaneous / Other' : 'Direct Vendor'))} ${e.notes ? `• ${escapeHtml(e.notes)}` : ''}</div>
                     </td>
                     <td class="py-3.5 px-4 text-xs text-slate-300">${escapeHtml(e.staff_name || 'Manager')}</td>
                     <td class="py-3.5 px-4">
@@ -1405,6 +1405,12 @@ const LiterosApp = (() => {
         }).join('');
     }
 
+    function handleExpenditureCategoryChange(category) {
+        const row = document.getElementById('expVendorApprovalRow');
+        if (!row) return;
+        row.classList.toggle('hidden', category === 'Other');
+    }
+
     function openNewExpenditureModal() {
         const form = document.getElementById('expenditureForm');
         if (!form) return;
@@ -1413,6 +1419,7 @@ const LiterosApp = (() => {
         form.branch_id.value = state.activeBranchId;
         form.expense_date.value = new Date().toISOString().slice(0, 10);
         form.payment_method.value = 'MoMo';
+        handleExpenditureCategoryChange(form.category.value);
         document.getElementById('expenditureModalTitle').innerHTML = `<i class="fa-solid fa-wallet text-rose-400 mr-1.5"></i>Record Branch Expenditure`;
         document.getElementById('expenditureModal').classList.remove('hidden');
     }
@@ -1431,6 +1438,7 @@ const LiterosApp = (() => {
         form.expense_date.value = exp.expense_date;
         form.vendor_name.value = exp.vendor_name || '';
         form.notes.value = exp.notes || '';
+        handleExpenditureCategoryChange(form.category.value);
         document.getElementById('expenditureModalTitle').innerHTML = `<i class="fa-solid fa-pen text-amber-400 mr-1.5"></i>Edit Expenditure: ${escapeHtml(exp.reference_no)}`;
         document.getElementById('expenditureModal').classList.remove('hidden');
     }
@@ -1438,6 +1446,7 @@ const LiterosApp = (() => {
     async function submitExpenditureForm(e) {
         e.preventDefault();
         const form = e.target;
+        const isOther = form.category.value === 'Other';
         const payload = {
             id: form.id.value ? Number(form.id.value) : 0,
             branch_id: Number(form.branch_id.value || state.activeBranchId),
@@ -1446,8 +1455,8 @@ const LiterosApp = (() => {
             amount: parseFloat(form.amount.value),
             payment_method: form.payment_method.value,
             expense_date: form.expense_date.value,
-            vendor_name: form.vendor_name.value,
-            notes: form.notes.value
+            vendor_name: isOther ? '' : form.vendor_name.value,
+            notes: isOther ? '' : form.notes.value
         };
         try {
             const res = await api('save_expenditure', payload);
@@ -3522,6 +3531,7 @@ const LiterosApp = (() => {
         viewReceipt,
         exportSalesCsv,
         openNewExpenditureModal,
+        handleExpenditureCategoryChange,
         editExpenditure,
         submitExpenditureForm,
         deleteExpenditure,
