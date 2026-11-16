@@ -1065,6 +1065,7 @@ const LiterosApp = (() => {
     function renderTablesView() {
         const grid = document.getElementById('floorTablesGrid');
         if (!grid) return;
+        const cfg = getCurrentRoleConfig();
 
         const filtered = state.tables.filter(t => state.floorZone === 'all' || t.zone === state.floorZone);
 
@@ -1137,6 +1138,13 @@ const LiterosApp = (() => {
                             <option value="Reserved" ${t.status === 'Reserved' ? 'selected' : ''}>Reserved</option>
                             <option value="Needs Cleaning" ${t.status === 'Needs Cleaning' ? 'selected' : ''}>Cleaning</option>
                         </select>
+                        ${cfg.canAddTable ? `
+                            <button type="button" onclick="LiterosApp.editTable(${t.id})"
+                                    title="Edit Table"
+                                    class="px-2.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-white/10 text-xs text-slate-200 transition">
+                                <i class="fa-solid fa-pen"></i>
+                            </button>
+                        ` : ''}
                     </div>
                 </div>
             `;
@@ -1177,11 +1185,43 @@ const LiterosApp = (() => {
         }
     }
 
+    function openNewTableModal() {
+        const form = document.getElementById('tableForm');
+        if (!form) return;
+        form.reset();
+        form.id.value = '';
+        form.capacity.value = 4;
+        const titleEl = document.getElementById('tableModalTitle');
+        const btnEl = document.getElementById('tableModalSubmitBtn');
+        if (titleEl) titleEl.textContent = 'Add Floor Table';
+        if (btnEl) btnEl.textContent = 'Add Table';
+        openModal('tableModal');
+    }
+
+    function editTable(id) {
+        const t = (state.tables || []).find(item => Number(item.id) === Number(id));
+        if (!t) return;
+        const form = document.getElementById('tableForm');
+        if (!form) return;
+        form.id.value = t.id;
+        form.table_number.value = t.table_number || '';
+        form.zone.value = t.zone || 'Main Hall';
+        form.capacity.value = t.capacity || 4;
+        const titleEl = document.getElementById('tableModalTitle');
+        const btnEl = document.getElementById('tableModalSubmitBtn');
+        if (titleEl) titleEl.textContent = `Edit Table: ${t.table_number}`;
+        if (btnEl) btnEl.textContent = 'Save Changes';
+        openModal('tableModal');
+    }
+
     async function submitNewTable(e) {
         e.preventDefault();
         const form = e.target;
+        const tableId = form.id?.value ? Number(form.id.value) : 0;
+        const existing = tableId > 0 ? (state.tables || []).find(t => Number(t.id) === tableId) : null;
         const payload = {
-            branch_id: state.activeBranchId,
+            id: tableId,
+            branch_id: existing ? Number(existing.branch_id || state.activeBranchId) : state.activeBranchId,
             table_number: form.table_number.value,
             zone: form.zone.value,
             capacity: Number(form.capacity.value)
@@ -1189,6 +1229,7 @@ const LiterosApp = (() => {
         try {
             const res = await api('save_table', payload);
             form.reset();
+            if (form.id) form.id.value = '';
             closeModal('tableModal');
             await loadBootstrap(state.activeBranchId);
             toast(res.message);
@@ -3747,6 +3788,8 @@ const LiterosApp = (() => {
         setFloorZone,
         openPosForTable,
         changeTableStatus,
+        openNewTableModal,
+        editTable,
         submitNewTable,
         quickSettleOrder,
         viewReceipt,

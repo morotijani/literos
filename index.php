@@ -450,7 +450,7 @@ $literosIsProd = isProductionMode();
                         <span class="px-3 py-1.5 rounded-xl bg-indigo-500/15 border border-indigo-500/30 text-xs text-indigo-300">
                             Cleaning: <strong id="floorCountCleaning" class="font-mono-num">0</strong>
                         </span>
-                        <button id="btnAddFloorTable" onclick="LiterosApp.openModal('tableModal')"
+                        <button id="btnAddFloorTable" onclick="LiterosApp.openNewTableModal()"
                                 class="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs">
                             <i class="fa-solid fa-plus mr-1"></i>Add Table
                         </button>
@@ -1900,12 +1900,13 @@ $literosIsProd = isProductionMode();
         </form>
     </div>
 
-    <!-- 7. Add Floor Table Modal -->
+    <!-- 7. Add / Edit Floor Table Modal -->
     <div id="tableModal" class="hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-        <form onsubmit="LiterosApp.submitNewTable(event)"
+        <form id="tableForm" onsubmit="LiterosApp.submitNewTable(event)"
               class="glass-panel rounded-2xl max-w-sm w-full p-6 border border-white/15 space-y-3.5">
+            <input type="hidden" name="id">
             <div class="flex items-center justify-between border-b border-white/10 pb-3">
-                <h3 class="font-bold text-base text-white">Add Floor Table</h3>
+                <h3 id="tableModalTitle" class="font-bold text-base text-white">Add Floor Table</h3>
                 <button type="button" onclick="LiterosApp.closeModal('tableModal')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
             </div>
             <div>
@@ -1927,7 +1928,7 @@ $literosIsProd = isProductionMode();
             </div>
             <div class="flex justify-end gap-2 pt-2">
                 <button type="button" onclick="LiterosApp.closeModal('tableModal')" class="px-4 py-2 rounded-xl bg-slate-800 text-xs text-slate-300">Cancel</button>
-                <button type="submit" class="px-5 py-2 rounded-xl bg-amber-500 text-slate-950 font-bold text-xs">Add Table</button>
+                <button id="tableModalSubmitBtn" type="submit" class="px-5 py-2 rounded-xl bg-amber-500 text-slate-950 font-bold text-xs">Add Table</button>
             </div>
         </form>
     </div>
