@@ -60,7 +60,7 @@ class Database {
                     $sawClosureCount = (int)$pdo->query("SELECT COUNT(*) FROM orders WHERE branch_id = 2 AND created_at >= '2024-11-01 00:00:00' AND created_at <= '2025-11-30 23:59:59'")->fetchColumn();
                     $recentSlumpAvg = (float)$pdo->query("SELECT COALESCE(SUM(total_amount), 0) / 75.0 FROM orders WHERE created_at >= '2026-09-01 00:00:00' AND created_at <= '2026-11-14 23:59:59'")->fetchColumn();
                     $otherExpCount = (int)$pdo->query("SELECT COUNT(*) FROM expenditures WHERE category = 'Other'")->fetchColumn();
-                    if ($compName !== 'Shakes and Dessert' || $orderCount < 500 || $catCount < 11 || $coffersCount < 20 || $taxTipSum > 0 || $oldSeed > 0 || $decBreakMax > 3500 || $sawClosureCount > 0 || $recentSlumpAvg > 42000 || $otherExpCount === 0) {
+                    if ($compName !== 'Shakes and Dessert' || $orderCount < 4500 || $catCount < 11 || $coffersCount < 20 || $taxTipSum > 0 || $oldSeed > 0 || $decBreakMax > 3500 || $sawClosureCount > 0 || $recentSlumpAvg > 42000 || $otherExpCount === 0) {
                         $needsSeed = true;
                     }
                 }
@@ -134,7 +134,7 @@ class Database {
                 $sawClosureCount = (int)$pdo->query("SELECT COUNT(*) FROM orders WHERE branch_id = 2 AND created_at >= '2024-11-01 00:00:00' AND created_at <= '2025-11-30 23:59:59'")->fetchColumn();
                 $recentSlumpAvg = (float)$pdo->query("SELECT COALESCE(SUM(total_amount), 0) / 75.0 FROM orders WHERE created_at >= '2026-09-01 00:00:00' AND created_at <= '2026-11-14 23:59:59'")->fetchColumn();
                 $otherExpCount = (int)$pdo->query("SELECT COUNT(*) FROM expenditures WHERE category = 'Other'")->fetchColumn();
-                if ($compName !== 'Shakes and Dessert' || $orderCount < 500 || $catCount < 11 || $coffersCount < 20 || $taxTipSum > 0 || $oldSeed > 0 || $decBreakMax > 3500 || $sawClosureCount > 0 || $recentSlumpAvg > 42000 || $otherExpCount === 0) {
+                if ($compName !== 'Shakes and Dessert' || $orderCount < 4500 || $catCount < 11 || $coffersCount < 20 || $taxTipSum > 0 || $oldSeed > 0 || $decBreakMax > 3500 || $sawClosureCount > 0 || $recentSlumpAvg > 42000 || $otherExpCount === 0) {
                     $needsSeed = true;
                 }
             }
@@ -443,7 +443,8 @@ class Database {
             'KNUST SRC Catering Order', 'Suame Magazine Engineers', 'Airport Residential Guests'
         ];
 
-        $orderTypes = ['Dine-In', 'Dine-In', 'Dine-In', 'Takeaway', 'Delivery'];
+        // PDF sales report shows Dine-In dominates (~80%), supplemented by Takeaway & Delivery
+        $orderTypes = ['Dine-In', 'Dine-In', 'Dine-In', 'Dine-In', 'Dine-In', 'Dine-In', 'Dine-In', 'Dine-In', 'Takeaway', 'Delivery'];
 
         $pdo->beginTransaction();
 
@@ -554,64 +555,77 @@ class Database {
         while ($currDate <= $endDate) {
             $year = (int)$currDate->format('Y');
             $month = (int)$currDate->format('n');
+            $dayOfMonthNum = (int)$currDate->format('j');
             $dayOfWeek = (int)$currDate->format('N'); // 1 (Mon) .. 7 (Sun)
             $dateStr = $currDate->format('Y-m-d');
             $isWeekend = ($dayOfWeek >= 5); // Friday, Saturday, Sunday
 
             $isRecentSlump = ($dateStr >= '2026-09-01');
 
+            // PDF sales pattern: Sunday is strongest (1.12x), Saturday strong (1.04x), Friday (0.86x)
+            $weekendDowMult = ($dayOfWeek === 7) ? 1.12 : (($dayOfWeek === 6) ? 1.04 : (($dayOfWeek === 5) ? 0.86 : 1.00));
+
             // Determine daily company-wide target revenue in GHS
             if ($year === 2024) {
                 // Booming year 1
                 $companyDailyTarget = $isWeekend
-                    ? (float)mt_rand(74000, 104000)
+                    ? (float)mt_rand(74000, 102000) * $weekendDowMult
                     : (float)mt_rand(47000, 61000);
             } elseif ($year === 2025) {
                 // Peak booming year 2
                 $companyDailyTarget = $isWeekend
-                    ? (float)mt_rand(78000, 112000)
+                    ? (float)mt_rand(78000, 108000) * $weekendDowMult
                     : (float)mt_rand(51000, 66000);
             } elseif ($isRecentSlump) {
                 // Past 3 months (Sep - Nov 2026): bad sales across all three branches (~GHS 30,000 - 40,000/day combined)
                 $companyDailyTarget = $isWeekend
-                    ? (float)mt_rand(35500, 40500)
+                    ? (float)mt_rand(34500, 38500) * $weekendDowMult
                     : (float)mt_rand(30000, 35500);
             } else {
                 // Early-to-mid 2026: Business is down compared to 2024/2025 boom, but still healthy/good
                 $companyDailyTarget = $isWeekend
-                    ? (float)mt_rand(48000, 69000)
+                    ? (float)mt_rand(48000, 68000) * $weekendDowMult
                     : (float)mt_rand(31000, 43000);
             }
 
-            // Festive boost in December & Eid/Graduation months (skip during the Sep-Nov 2026 slump)
-            if (!$isRecentSlump && ($month === 12 || $month === 4 || $month === 11)) {
+            // Festive & PDF calendar peak boosts (skip April softening and Sep-Nov 2026 slump)
+            if (!$isRecentSlump && ($month === 12 || $month === 11)) {
                 $companyDailyTarget *= 1.08;
+            }
+            if ($month === 12 && $dayOfMonthNum >= 26 && $dayOfMonthNum <= 31) {
+                // Boxing Day through New Year's Eve rush (seen strongly in Dec 26-29 PDF data)
+                $companyDailyTarget *= 1.18;
+            } elseif ($month === 2 && $dayOfMonthNum >= 14 && $dayOfMonthNum <= 16) {
+                // Valentine's weekend surge (seen strongly in Feb 14-16 PDF data)
+                $companyDailyTarget *= 1.18;
             }
 
             // Pre-compute Sawaba target when active in late 2025/2026 so company-wide 3-month slump stays GHS 30k-40k/day
             $sawabaOverrideTarget = null;
             if ($dateStr >= '2025-12-01' && $dateStr <= '2026-08-31') {
                 $sawabaOverrideTarget = $isWeekend
-                    ? (float)mt_rand(23000, 27000)
+                    ? (float)mt_rand(22500, 26500) * $weekendDowMult
                     : (float)mt_rand(19500, 23000);
             } elseif ($dateStr >= '2026-09-01' && $dateStr <= '2026-09-30') {
                 $sawabaOverrideTarget = $isWeekend
-                    ? (float)mt_rand(20500, 22000)
+                    ? (float)mt_rand(20000, 21500) * $weekendDowMult
                     : (float)mt_rand(19500, 21000);
             } elseif ($dateStr >= '2026-10-01') {
                 $sawabaOverrideTarget = $isWeekend
-                    ? (float)mt_rand(10200, 12200)
+                    ? (float)mt_rand(10000, 11800) * $weekendDowMult
                     : (float)mt_rand(8200, 10200);
             }
 
             // Dechemso branch (ID 3) incident closure & deep-cleaning break: 2026-05-02 to 2026-07-26 (reopens 2026-07-27)
             $isDechemsoBreakPeriod = ($dateStr >= '2026-05-02' && $dateStr <= '2026-07-26');
+            // Specific break dates observed in Dechemso PDF (May 17 = GHS 1,800.00, May 31, Jun 11)
+            $isDechemsoPdfBreakAnchor = in_array($dateStr, ['2026-05-17', '2026-05-31', '2026-06-11'], true);
 
             // Sawaba branch (ID 2) incident closure: 2024-11-01 to 2025-11-30 (0 sales; reopens 2025-12-01)
             $isSawabaClosurePeriod = ($dateStr >= '2024-11-01' && $dateStr <= '2025-11-30');
 
-            // Create consolidated shift/group orders per day across the 3 branches
-            // so total daily revenue matches $companyDailyTarget and 35% MoMo / 60% Cash / 5% QR Pay
+            // Create multi-shift realistic orders per day across the 3 branches
+            // calibrated to PDF day-of-week hierarchy, monthly trajectory, Dine-In dominance, and 60/35/5 tender mix
             foreach ([1, 2, 3] as $bId) {
                 $bCfg = $branchConfig[$bId];
 
@@ -623,7 +637,7 @@ class Database {
                 // During Dechemso's closure break (May 2 - late July 2026):
                 // Not every day had sales (~52% days have 0 orders); active days only have small Loaded Fries sales totaling GHS 1,500 - 3,000/day
                 $inDechemsoBreak = ($bId === 3 && $isDechemsoBreakPeriod);
-                if ($inDechemsoBreak && mt_rand(1, 100) <= 52) {
+                if ($inDechemsoBreak && !$isDechemsoPdfBreakAnchor && mt_rand(1, 100) <= 52) {
                     continue;
                 }
 
@@ -643,8 +657,28 @@ class Database {
                         : ($companyDailyTarget * $bCfg['weight']);
                 }
 
-                // 2 consolidated orders per branch per day (Afternoon & Evening Rush), 1 small batch during Dechemso break
-                $numOrders = $inDechemsoBreak ? 1 : (($isWeekend && $bId === 1) ? 2 : 1);
+                // Apply Dechemso monthly seasonality observed in the sales PDF (Jan peak -> Feb/Mar -> Apr pre-incident softening)
+                if ($bId === 3 && !$inDechemsoBreak && !$isRecentSlump) {
+                    $ymStr = $year . '-' . sprintf('%02d', $month);
+                    if ($ymStr === '2026-01') {
+                        $branchDailyTarget *= 1.14;
+                    } elseif ($ymStr === '2026-03') {
+                        $branchDailyTarget *= 0.94;
+                    } elseif ($ymStr === '2026-04') {
+                        $branchDailyTarget *= 0.72; // Noticeable April softening in PDF right before May 2 break
+                    }
+                }
+
+                // Realistic multi-shift ticket batching:
+                // - Dechemso break: 1 batch (or 3 orders on May 17 matching PDF GHS 1,800.00)
+                // - Normal weekdays: 2 shift sessions; Weekends: 3 sessions (4 on Dechemso Nov 2025 - Apr 2026 PDF weekends)
+                if ($inDechemsoBreak) {
+                    $numOrders = ($dateStr === '2026-05-17') ? 3 : 1;
+                } elseif ($isWeekend) {
+                    $numOrders = ($bId === 3 && $dateStr >= '2025-11-01' && $dateStr <= '2026-04-30') ? 4 : 3;
+                } else {
+                    $numOrders = 2;
+                }
                 $targetPerOrder = $branchDailyTarget / $numOrders;
 
                 for ($k = 0; $k < $numOrders; $k++) {
@@ -674,11 +708,21 @@ class Database {
                         $m1 = $menuCatalog[65]; // Loaded Fries (150 GHc)
                         $m2 = $menuCatalog[66]; // Loaded Fries (180 GHc)
 
-                        // Pick exact combinations of 150 GHc & 180 GHc Loaded Fries strictly within GHS 1,500 - 3,000
-                        $qty1 = mt_rand(4, 10); // 600 .. 1500
-                        $maxQty2 = max(1, (int)floor((3000 - ($qty1 * 150)) / 180));
-                        $minQty2 = max(1, (int)ceil((1500 - ($qty1 * 150)) / 180));
-                        $qty2 = ($minQty2 <= $maxQty2) ? mt_rand($minQty2, $maxQty2) : $minQty2;
+                        if ($dateStr === '2026-05-17') {
+                            // Exact PDF match for 17 May 2026 (3 orders totaling GHS 1,800.00 in Loaded Fries)
+                            $may17Splits = [
+                                [2, 0], // 2 x 150 = 300
+                                [4, 0], // 4 x 150 = 600 (single Loaded Fries 150 batch)
+                                [0, 5], // 5 x 180 = 900 -> 300 + 600 + 900 = GHS 1,800.00
+                            ];
+                            [$qty1, $qty2] = $may17Splits[$k];
+                        } else {
+                            // Pick exact combinations of 150 GHc & 180 GHc Loaded Fries strictly within GHS 1,500 - 3,000
+                            $qty1 = mt_rand(4, 10); // 600 .. 1500
+                            $maxQty2 = max(1, (int)floor((3000 - ($qty1 * 150)) / 180));
+                            $minQty2 = max(1, (int)ceil((1500 - ($qty1 * 150)) / 180));
+                            $qty2 = ($minQty2 <= $maxQty2) ? mt_rand($minQty2, $maxQty2) : $minQty2;
+                        }
 
                         $line1 = round($qty1 * $m1['price'], 2);
                         $line2 = round($qty2 * $m2['price'], 2);
@@ -687,23 +731,30 @@ class Database {
                     } else {
                         $ordType = $orderTypes[array_rand($orderTypes)];
                         $custName = $customerNames[array_rand($customerNames)];
-                        $guests = mt_rand(8, 32);
-                        $orderNote = 'Daily consolidated shift batch';
+                        $guests = mt_rand(3, 14);
+                        $orderNote = ($k === 0)
+                            ? 'Midday / Afternoon Lounge Session'
+                            : (($k === $numOrders - 1) ? 'Evening Peak Service Batch' : 'Peak Lounge Service Batch');
 
-                        // Pick 2 menu items heavily weighted toward Top Sellers:
-                        // Crazy Shakes category (IDs 22..27) and Loaded Fries 150 & 180 (IDs 65, 66)
-                        $crazyShakeIds = [22, 23, 24, 25, 26, 27];
+                        // Pick 2 menu items weighted toward Top Sellers & PDF core price tiers (60/80/150/180):
+                        // Crazy Shakes (22..27), SD Special (28), Loaded Fries 150 & 180 (65, 66), Milkshakes (16..21), Slushies/Mocktails (48..64)
+                        $crazyShakeIds = [22, 23, 24, 25, 26, 27, 28];
                         $loadedFriesIds = [65, 66];
-                        if (mt_rand(1, 100) <= 68) {
-                            $itemId1 = $crazyShakeIds[array_rand($crazyShakeIds)];
-                        } else {
-                            $itemId1 = $menuIds[mt_rand(0, max(0, (int)floor($menuCount / 2) - 1))];
-                        }
+                        $pdfCoreMixIds = [4, 10, 13, 14, 16, 17, 18, 19, 20, 21, 29, 30, 38, 42, 43, 48, 55, 57, 58, 67, 69];
 
                         if (mt_rand(1, 100) <= 65) {
-                            $itemId2 = $loadedFriesIds[array_rand($loadedFriesIds)];
+                            $itemId1 = $crazyShakeIds[array_rand($crazyShakeIds)];
                         } else {
-                            $itemId2 = $menuIds[mt_rand((int)floor($menuCount / 2), max(0, $menuCount - 1))];
+                            $itemId1 = $pdfCoreMixIds[array_rand($pdfCoreMixIds)];
+                        }
+
+                        $r2 = mt_rand(1, 100);
+                        if ($r2 <= 58) {
+                            $itemId2 = $loadedFriesIds[array_rand($loadedFriesIds)];
+                        } elseif ($r2 <= 86) {
+                            $itemId2 = $pdfCoreMixIds[array_rand($pdfCoreMixIds)];
+                        } else {
+                            $itemId2 = $menuIds[mt_rand(0, max(0, $menuCount - 1))];
                         }
                         $m1 = $menuCatalog[$itemId1];
                         $m2 = $menuCatalog[$itemId2];
@@ -726,7 +777,9 @@ class Database {
                     $tipAmt = 0.00;
                     $totalAmt = $subtotal;
 
-                    $hour = $inDechemsoBreak ? mt_rand(13, 18) : (($k === 0) ? mt_rand(11, 15) : mt_rand(17, 21));
+                    $hour = $inDechemsoBreak
+                        ? mt_rand(13, 18)
+                        : ($k === 0 ? mt_rand(11, 14) : ($k === 1 ? mt_rand(15, 18) : mt_rand(19, 22)));
                     $min = mt_rand(10, 58);
                     $createdAt = sprintf('%s %02d:%02d:00', $dateStr, $hour, $min);
                     $completedAt = sprintf('%s %02d:%02d:00', $dateStr, min(23, $hour + 1), $min);
@@ -740,14 +793,18 @@ class Database {
 
                     $currentOrderId = (int)$pdo->lastInsertId();
 
-                    $insItem->execute([
-                        $currentOrderId, $itemId1, $m1['name'], $m1['price'], $m1['cost'],
-                        $qty1, '', $line1, 'Plated'
-                    ]);
-                    $insItem->execute([
-                        $currentOrderId, $itemId2, $m2['name'], $m2['price'], $m2['cost'],
-                        $qty2, '', $line2, 'Plated'
-                    ]);
+                    if ($qty1 > 0) {
+                        $insItem->execute([
+                            $currentOrderId, $itemId1, $m1['name'], $m1['price'], $m1['cost'],
+                            $qty1, '', $line1, 'Plated'
+                        ]);
+                    }
+                    if ($qty2 > 0) {
+                        $insItem->execute([
+                            $currentOrderId, $itemId2, $m2['name'], $m2['price'], $m2['cost'],
+                            $qty2, '', $line2, 'Plated'
+                        ]);
+                    }
                 }
             }
 

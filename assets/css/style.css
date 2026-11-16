@@ -216,8 +216,9 @@ html.light .bg-\[\#090b10\] {
 }
 
 /* Login Screen & Modal Backdrops in Light Mode */
-html.light #loginScreenOverlay {
-  background-color: rgba(241, 245, 249, 0.95) !important;
+html.light #loginScreenOverlay,
+html.light .bg-\[\#07090e\]\/95 {
+  background-color: rgba(241, 245, 249, 0.96) !important;
 }
 html.light .bg-\[\#0d111a\] {
   background-color: #ffffff !important;
@@ -235,7 +236,9 @@ html.light .from-slate-900\/40.to-slate-950\/60 {
 
 /* Surface Backgrounds */
 html.light .bg-slate-950,
+html.light .bg-slate-950\/95,
 html.light .bg-slate-950\/90,
+html.light .bg-slate-950\/85,
 html.light .bg-slate-950\/80,
 html.light .bg-slate-950\/70,
 html.light .bg-slate-950\/60,
@@ -276,8 +279,67 @@ html.light .hover\:bg-white\/5:hover {
   background-color: rgba(245, 158, 11, 0.06) !important;
 }
 
-html.light .bg-rose-950\/50 {
-  background-color: rgba(244, 63, 94, 0.12) !important;
+/* Toast Notifications & Semantic Tinted Surfaces in Light Mode */
+html.light .bg-emerald-950\/90 {
+  background-color: #ecfdf5 !important;
+  border-color: rgba(16, 185, 129, 0.4) !important;
+  box-shadow: 0 12px 28px -8px rgba(15, 23, 42, 0.14) !important;
+}
+html.light .bg-amber-950\/90 {
+  background-color: #fffbeb !important;
+  border-color: rgba(245, 158, 11, 0.45) !important;
+  box-shadow: 0 12px 28px -8px rgba(15, 23, 42, 0.14) !important;
+}
+html.light .bg-rose-950\/90 {
+  background-color: #fff1f2 !important;
+  border-color: rgba(244, 63, 94, 0.4) !important;
+  box-shadow: 0 12px 28px -8px rgba(15, 23, 42, 0.14) !important;
+}
+html.light .bg-indigo-950\/90 {
+  background-color: #eef2ff !important;
+  border-color: rgba(99, 102, 241, 0.4) !important;
+  box-shadow: 0 12px 28px -8px rgba(15, 23, 42, 0.14) !important;
+}
+
+/* Floor Table Status Cards in Light Mode */
+html.light .bg-emerald-950\/20 {
+  background-color: #ecfdf5 !important;
+}
+html.light .bg-rose-950\/25 {
+  background-color: #fff1f2 !important;
+}
+html.light .bg-amber-950\/25 {
+  background-color: #fffbeb !important;
+}
+html.light .bg-indigo-950\/25 {
+  background-color: #eef2ff !important;
+}
+
+/* Danger / Delete / Clear Action Buttons in Light Mode */
+html.light .bg-rose-950\/50,
+html.light .bg-rose-950\/60,
+html.light .bg-rose-950\/70 {
+  background-color: #ffe4e6 !important;
+}
+html.light .hover\:bg-rose-900\/60:hover {
+  background-color: #fecdd3 !important;
+}
+html.light .hover\:bg-rose-600:hover {
+  background-color: #e11d48 !important;
+  color: #ffffff !important;
+}
+html.light .hover\:bg-rose-600:hover * {
+  color: #ffffff !important;
+}
+
+/* Category Pill Badge Contrast in Light Mode */
+html.light .cat-pill:not(.active) .bg-black\/25 {
+  background-color: #e2e8f0 !important;
+  color: #334155 !important;
+}
+html.light .cat-pill.active .bg-black\/25 {
+  background-color: rgba(15, 23, 42, 0.14) !important;
+  color: #090b10 !important;
 }
 
 /* Form Controls (Inputs, Selects, Textareas) */
@@ -310,10 +372,10 @@ html.light .divide-white\/10 > :not([hidden]) ~ :not([hidden]) {
 }
 
 /* Typography Hierarchy in Light Mode */
-html.light .text-white:not(.bg-rose-500):not(.bg-emerald-500):not(.bg-amber-500):not(.bg-indigo-500) {
+html.light .text-white:not(.bg-rose-500):not(.bg-rose-600):not(.bg-emerald-500):not(.bg-emerald-600):not(.bg-amber-500):not(.bg-amber-600):not(.bg-indigo-500):not(.bg-indigo-600) {
   color: #0f172a !important;
 }
-html.light .hover\:text-white:hover {
+html.light .hover\:text-white:not(.hover\:bg-rose-600):not(.hover\:bg-rose-500):not(.hover\:bg-emerald-500):not(.hover\:bg-indigo-500):hover {
   color: #0f172a !important;
 }
 html.light .text-slate-100,
