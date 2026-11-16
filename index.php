@@ -171,6 +171,14 @@ declare(strict_types=1);
                     </div>
                 </button>
 
+                <button data-tab="coffers" onclick="LiterosApp.switchTab('coffers')"
+                        class="nav-btn w-full flex items-center justify-between px-3.5 py-3 rounded-xl text-xs font-semibold text-slate-300 hover:text-white border border-transparent">
+                    <div class="flex items-center gap-3">
+                        <i class="fa-solid fa-vault text-base w-5 text-center text-emerald-400"></i>
+                        <span class="hidden lg:inline">Finance & Coffers</span>
+                    </div>
+                </button>
+
                 <button data-tab="reports" onclick="LiterosApp.switchTab('reports')"
                         class="nav-btn w-full flex items-center justify-between px-3.5 py-3 rounded-xl text-xs font-semibold text-slate-300 hover:text-white border border-transparent">
                     <div class="flex items-center gap-3">
@@ -240,7 +248,7 @@ declare(strict_types=1);
                 <!-- Left Catalog Area -->
                 <div class="flex-1 flex flex-col p-5 overflow-y-auto">
                     <!-- Search & Categories Header -->
-                    <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mb-4">
+                    <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mb-4 shrink-0">
                         <div class="relative flex-1">
                             <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
                             <input id="posSearchInput"
@@ -258,7 +266,7 @@ declare(strict_types=1);
                     </div>
 
                     <!-- Horizontal Categories Pill Strip -->
-                    <div id="posCategoriesBar" class="flex items-center gap-2 overflow-x-auto pb-3 mb-3"></div>
+                    <div id="posCategoriesBar" class="flex items-center gap-2 overflow-x-auto shrink-0 pt-1 pb-3 mb-3"></div>
 
                     <!-- Dish Cards Grid -->
                     <div id="posMenuGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-3.5 pb-8"></div>
@@ -633,6 +641,196 @@ declare(strict_types=1);
                                 </tr>
                             </thead>
                             <tbody id="expendituresTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- =============================================================
+                 VIEW 4A-2: FINANCE & COFFERS TREASURY VAULT
+                 ============================================================= -->
+            <section id="view-coffers" class="view-section hidden p-6 space-y-6">
+                <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                    <div>
+                        <h2 class="text-xl font-bold text-white flex items-center gap-2.5">
+                            <i class="fa-solid fa-vault text-emerald-400"></i>
+                            Finance & Coffers Treasury Vault (Shakes and Dessert)
+                        </h2>
+                        <p class="text-xs text-slate-400 mt-0.5">
+                            Track all sales revenue inflows, manual coffer deposits, market/goods purchase withdrawals (~GHS 8,500+/mo), and normal withdrawals
+                        </p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button onclick="LiterosApp.openCofferModal('Deposit')"
+                                class="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-xs flex items-center gap-1.5 shadow-lg shadow-emerald-500/20 transition">
+                            <i class="fa-solid fa-circle-plus"></i>+ Add Money to Coffers
+                        </button>
+                        <button onclick="LiterosApp.openCofferModal('Withdrawal', 'Withdrawal for Goods / Market')"
+                                class="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs flex items-center gap-1.5 shadow-lg shadow-amber-500/20 transition">
+                            <i class="fa-solid fa-basket-shopping"></i>- Withdraw for Goods / Market
+                        </button>
+                        <button onclick="LiterosApp.openCofferModal('Withdrawal', 'Normal Withdrawal')"
+                                class="px-3.5 py-2 rounded-xl bg-rose-500/20 hover:bg-rose-500 text-rose-300 hover:text-slate-950 border border-rose-500/40 font-extrabold text-xs flex items-center gap-1.5 transition">
+                            <i class="fa-solid fa-money-bill-transfer"></i>- Normal Withdrawal
+                        </button>
+                        <button onclick="LiterosApp.exportCoffersCsv()"
+                                class="px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-white/10 text-xs font-semibold text-slate-300 flex items-center gap-1.5 transition">
+                            <i class="fa-solid fa-file-csv text-emerald-400"></i>Export CSV
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 6 Executive Coffers & Revenue Summary Cards -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+                    <div class="glass-panel rounded-2xl p-4 border border-emerald-500/25">
+                        <div class="flex items-center justify-between text-[11px] text-slate-400">
+                            <span>All Paid Sales Revenue</span>
+                            <i class="fa-solid fa-sack-dollar text-emerald-400"></i>
+                        </div>
+                        <div id="cofKpiTotalRevenue" class="font-mono-num text-lg font-extrabold text-emerald-400 mt-1">GHS 0.00</div>
+                        <div id="cofKpiRevenueSub" class="text-[10px] text-slate-400 mt-1 font-mono-num">Cash, MoMo & QR Pay</div>
+                    </div>
+
+                    <div class="glass-panel rounded-2xl p-4 border border-cyan-500/25">
+                        <div class="flex items-center justify-between text-[11px] text-slate-400">
+                            <span>Manual Coffer Deposits (+)</span>
+                            <i class="fa-solid fa-hand-holding-dollar text-cyan-400"></i>
+                        </div>
+                        <div id="cofKpiManualDeposits" class="font-mono-num text-lg font-extrabold text-cyan-300 mt-1">GHS 0.00</div>
+                        <div id="cofKpiManualDepositsSub" class="text-[10px] text-slate-400 mt-1 font-mono-num">0 manual additions</div>
+                    </div>
+
+                    <div class="glass-panel rounded-2xl p-4 border border-white/10">
+                        <div class="flex items-center justify-between text-[11px] text-slate-400">
+                            <span>Gross Coffers Inflow</span>
+                            <i class="fa-solid fa-arrow-trend-up text-amber-400"></i>
+                        </div>
+                        <div id="cofKpiGrossInflow" class="font-mono-num text-lg font-extrabold text-white mt-1">GHS 0.00</div>
+                        <div class="text-[10px] text-slate-400 mt-1">Sales Revenue + Manual Deposits</div>
+                    </div>
+
+                    <div class="glass-panel rounded-2xl p-4 border border-amber-500/30">
+                        <div class="flex items-center justify-between text-[11px] text-slate-400">
+                            <span>Goods / Market Withdrawals</span>
+                            <i class="fa-solid fa-basket-shopping text-amber-400"></i>
+                        </div>
+                        <div id="cofKpiGoodsWithdrawals" class="font-mono-num text-lg font-extrabold text-amber-300 mt-1">-GHS 0.00</div>
+                        <div id="cofKpiGoodsWithdrawalsSub" class="text-[10px] text-amber-200/80 mt-1 font-mono-num">Avg ~GHS 8,500+/mo</div>
+                    </div>
+
+                    <div class="glass-panel rounded-2xl p-4 border border-rose-500/30">
+                        <div class="flex items-center justify-between text-[11px] text-slate-400">
+                            <span>Normal Withdrawals (-)</span>
+                            <i class="fa-solid fa-money-bill-wave text-rose-400"></i>
+                        </div>
+                        <div id="cofKpiNormalWithdrawals" class="font-mono-num text-lg font-extrabold text-rose-400 mt-1">-GHS 0.00</div>
+                        <div id="cofKpiNormalWithdrawalsSub" class="text-[10px] text-slate-400 mt-1 font-mono-num">0 normal withdrawals</div>
+                    </div>
+
+                    <div class="glass-panel rounded-2xl p-4 border border-emerald-500/40 bg-emerald-500/[0.04]">
+                        <div class="flex items-center justify-between text-[11px] text-emerald-300 font-semibold">
+                            <span>Net Available Coffers</span>
+                            <i class="fa-solid fa-vault text-emerald-400"></i>
+                        </div>
+                        <div id="cofKpiNetBalance" class="font-mono-num text-lg font-extrabold text-white mt-1">GHS 0.00</div>
+                        <div id="cofKpiNetBalanceSub" class="text-[10px] text-emerald-300 mt-1 font-mono-num">After withdrawals & expenses</div>
+                    </div>
+                </div>
+
+                <!-- Revenue by Payment Channel Breakdown Bar -->
+                <div class="glass-panel rounded-2xl p-4 border border-white/10 grid grid-cols-1 md:grid-cols-4 gap-3">
+                    <div class="p-3 rounded-xl bg-slate-900/70 border border-white/5 flex items-center justify-between">
+                        <div>
+                            <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Physical Cash Sales (60%)</div>
+                            <div id="cofRevCash" class="font-mono-num text-sm font-extrabold text-emerald-400 mt-0.5">GHS 0.00</div>
+                        </div>
+                        <i class="fa-solid fa-money-bill-1-wave text-emerald-400/70 text-lg"></i>
+                    </div>
+                    <div class="p-3 rounded-xl bg-slate-900/70 border border-white/5 flex items-center justify-between">
+                        <div>
+                            <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">MoMo Mobile Money (35%)</div>
+                            <div id="cofRevMomo" class="font-mono-num text-sm font-extrabold text-amber-300 mt-0.5">GHS 0.00</div>
+                        </div>
+                        <i class="fa-solid fa-mobile-screen-button text-amber-400/70 text-lg"></i>
+                    </div>
+                    <div class="p-3 rounded-xl bg-slate-900/70 border border-white/5 flex items-center justify-between">
+                        <div>
+                            <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">QR Pay Collections (5%)</div>
+                            <div id="cofRevQr" class="font-mono-num text-sm font-extrabold text-cyan-300 mt-0.5">GHS 0.00</div>
+                        </div>
+                        <i class="fa-solid fa-qrcode text-cyan-400/70 text-lg"></i>
+                    </div>
+                    <div class="p-3 rounded-xl bg-slate-900/70 border border-white/5 flex items-center justify-between">
+                        <div>
+                            <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Total Coffer Withdrawals</div>
+                            <div id="cofTotalWithdrawalsAll" class="font-mono-num text-sm font-extrabold text-rose-400 mt-0.5">-GHS 0.00</div>
+                        </div>
+                        <i class="fa-solid fa-arrow-up-right-from-square text-rose-400/70 text-lg"></i>
+                    </div>
+                </div>
+
+                <!-- Coffers Filter & Search Bar -->
+                <div class="glass-panel rounded-2xl p-4 border border-white/10 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <select id="coffersPurposeFilter"
+                                onchange="LiterosApp.setCoffersPurposeFilter(this.value)"
+                                class="px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-xs text-white font-semibold outline-none focus:border-amber-500">
+                            <option value="all">All Coffer Entries (Deposits & Withdrawals)</option>
+                            <option value="Withdrawal">All Withdrawals Only (-)</option>
+                            <option value="Withdrawal for Goods / Market">Withdrawal for Goods / Market (~GHS 8,500+/mo)</option>
+                            <option value="Normal Withdrawal">Normal Withdrawals Only</option>
+                            <option value="Deposit">Manual Coffer Deposits Only (+)</option>
+                        </select>
+
+                        <select id="coffersYearFilter"
+                                onchange="LiterosApp.setCoffersYearFilter(this.value)"
+                                class="px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-xs text-white font-semibold outline-none focus:border-amber-500">
+                            <option value="all">All Years (2024–2026)</option>
+                            <option value="2026">2026</option>
+                            <option value="2025">2025</option>
+                            <option value="2024">2024</option>
+                        </select>
+
+                        <select id="coffersChannelFilter"
+                                onchange="LiterosApp.setCoffersChannelFilter(this.value)"
+                                class="px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-xs text-white font-semibold outline-none focus:border-amber-500">
+                            <option value="all">All Channels (Cash / MoMo / Bank)</option>
+                            <option value="Cash">Cash</option>
+                            <option value="MoMo">MoMo</option>
+                            <option value="Bank Transfer">Bank Transfer</option>
+                        </select>
+                    </div>
+
+                    <div class="relative w-full lg:w-72">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                        <input type="text"
+                               id="coffersSearchInput"
+                               oninput="LiterosApp.setCoffersSearch(this.value)"
+                               placeholder="Search ref, market items, description..."
+                               class="w-full pl-8 pr-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-xs text-white outline-none focus:border-amber-500">
+                    </div>
+                </div>
+
+                <!-- Coffers Ledger Table -->
+                <div class="glass-panel rounded-2xl border border-white/10 overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="border-b border-white/10 text-[11px] uppercase tracking-wider text-slate-400 bg-slate-950/60">
+                                    <th class="py-3.5 px-4">Ref #</th>
+                                    <th class="py-3.5 px-4">Date</th>
+                                    <th class="py-3.5 px-4">Branch</th>
+                                    <th class="py-3.5 px-4">Type & Purpose</th>
+                                    <th class="py-3.5 px-4">Description & Purpose Details</th>
+                                    <th class="py-3.5 px-4">Recipient / Source</th>
+                                    <th class="py-3.5 px-4">Channel</th>
+                                    <th class="py-3.5 px-4">Authorized By</th>
+                                    <th class="py-3.5 px-4 text-right">Amount (GHS)</th>
+                                    <th class="py-3.5 px-4 text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="coffersTableBody"></tbody>
+                            <tfoot id="coffersTableFoot" class="bg-slate-950/90 border-t-2 border-amber-500/40 font-mono-num text-xs font-extrabold"></tfoot>
                         </table>
                     </div>
                 </div>
@@ -1021,22 +1219,70 @@ declare(strict_types=1);
                     <div>
                         <h2 class="text-xl font-bold text-white flex items-center gap-2.5">
                             <i class="fa-solid fa-utensils text-amber-400"></i>
-                            Menu Engineering, Cost Margin & Inventory Studio
+                            Menu Engineering, Categories, Cost Margin & Inventory Studio
                         </h2>
-                        <p class="text-xs text-slate-400 mt-0.5">Manage dishes, gross profit (GP%) margins, modifiers, and live portion inventory</p>
+                        <p class="text-xs text-slate-400 mt-0.5">Create, edit, reorder, or delete menu categories and manage dishes, GP% margins, modifiers, and portion stock</p>
                     </div>
-                    <button id="btnMenuStudioAddDish" onclick="LiterosApp.openNewMenuModal()"
-                            class="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-2">
-                        <i class="fa-solid fa-plus"></i>Add New Dish
-                    </button>
+                    <div class="flex flex-wrap items-center gap-2.5">
+                        <button id="btnMenuStudioAddCategory" onclick="LiterosApp.openNewCategoryModal()"
+                                class="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-amber-500/40 text-amber-300 font-bold text-xs flex items-center gap-2 transition">
+                            <i class="fa-solid fa-folder-plus"></i>+ New Category
+                        </button>
+                        <button id="btnMenuStudioAddDish" onclick="LiterosApp.openNewMenuModal()"
+                                class="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-2 transition">
+                            <i class="fa-solid fa-plus"></i>Add New Dish
+                        </button>
+                    </div>
                 </div>
 
+                <!-- Menu Categories CRUD Section -->
+                <div class="glass-panel rounded-2xl border border-white/10 p-5 space-y-4">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-3">
+                        <div>
+                            <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                                <i class="fa-solid fa-layer-group text-amber-400"></i>
+                                Culinary & Dessert Categories Directory (Full CRUD)
+                            </h3>
+                            <p class="text-[11px] text-slate-400">Click any category card to filter the dishes below, or use Edit / Toggle / Delete to manage POS categories</p>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span id="menuCategoriesCountBadge" class="px-2.5 py-1 rounded-lg bg-slate-900 border border-white/10 font-mono-num text-xs font-bold text-amber-300">0 Categories</span>
+                            <button id="btnMenuCategoryCardAdd" onclick="LiterosApp.openNewCategoryModal()"
+                                    class="px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/30 text-xs font-extrabold transition">
+                                <i class="fa-solid fa-plus mr-1"></i>Create Category
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="menuCategoriesCrudGrid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5"></div>
+                </div>
+
+                <!-- Dishes Filter Bar + Dishes Table -->
                 <div class="glass-panel rounded-2xl border border-white/10 overflow-hidden">
+                    <div class="p-4 border-b border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-950/40">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span class="text-xs font-bold text-white mr-1"><i class="fa-solid fa-filter text-amber-400 mr-1.5"></i>Filter Dishes:</span>
+                            <select id="menuStudioCategoryFilterSelect"
+                                    onchange="LiterosApp.setMenuStudioCategoryFilter(this.value)"
+                                    class="px-3 py-1.5 rounded-xl bg-slate-900 border border-white/10 text-xs text-white font-semibold outline-none focus:border-amber-500">
+                                <option value="all">All Categories</option>
+                            </select>
+                        </div>
+                        <div class="relative w-full sm:w-64">
+                            <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                            <input type="text"
+                                   id="menuStudioSearchInput"
+                                   oninput="LiterosApp.setMenuStudioSearch(this.value)"
+                                   placeholder="Search dish name or SKU..."
+                                   class="w-full pl-8 pr-3 py-1.5 rounded-xl bg-slate-900 border border-white/10 text-xs text-white outline-none focus:border-amber-500">
+                        </div>
+                    </div>
                     <div class="overflow-x-auto">
                         <table class="w-full text-left border-collapse">
                             <thead>
                                 <tr class="border-b border-white/10 text-[11px] uppercase tracking-wider text-slate-400 bg-slate-950/60">
                                     <th class="py-3.5 px-4">Dish / SKU</th>
+                                    <th class="py-3.5 px-4">Category</th>
                                     <th class="py-3.5 px-4">Sell Price</th>
                                     <th class="py-3.5 px-4">Food Cost</th>
                                     <th class="py-3.5 px-4">Gross Margin</th>
@@ -1315,7 +1561,10 @@ declare(strict_types=1);
 
             <div class="grid grid-cols-3 gap-3">
                 <div>
-                    <label class="block text-xs text-slate-400 mb-1">Category</label>
+                    <div class="flex items-center justify-between mb-1">
+                        <label class="text-xs text-slate-400">Category</label>
+                        <button type="button" onclick="LiterosApp.openNewCategoryModal()" class="text-[10px] font-bold text-amber-400 hover:underline">+ New</button>
+                    </div>
                     <select id="menuFormCategorySelect" name="category_id" class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-xs text-white"></select>
                 </div>
                 <div>
@@ -1370,6 +1619,88 @@ declare(strict_types=1);
             <div class="flex justify-end gap-2 pt-2">
                 <button type="button" onclick="LiterosApp.closeModal('menuItemModal')" class="px-4 py-2 rounded-xl bg-slate-800 text-xs text-slate-300">Cancel</button>
                 <button type="submit" class="px-5 py-2 rounded-xl bg-amber-500 text-slate-950 font-bold text-xs">Save Dish</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- 4B. Create / Edit Category Modal (Full Category CRUD) -->
+    <div id="categoryModal" class="hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+        <form id="categoryForm" onsubmit="LiterosApp.submitCategoryForm(event)"
+              class="glass-panel rounded-2xl max-w-md w-full p-6 border border-white/15 space-y-4">
+            <input type="hidden" name="id">
+            <div class="flex items-center justify-between border-b border-white/10 pb-3">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center">
+                        <i id="categoryModalPreviewIcon" class="fa-solid fa-layer-group"></i>
+                    </div>
+                    <div>
+                        <h3 id="categoryModalTitle" class="font-bold text-base text-white">Create Menu Category</h3>
+                        <p class="text-[11px] text-slate-400">Appears on POS filter bar, Menu Studio & BI Reports</p>
+                    </div>
+                </div>
+                <button type="button" onclick="LiterosApp.closeModal('categoryModal')" class="text-slate-400 hover:text-white">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="grid grid-cols-3 gap-3">
+                <div class="col-span-2">
+                    <label class="block text-xs text-slate-400 mb-1">Category Name *</label>
+                    <input name="name" required placeholder="e.g. Signature Milkshakes & Boba"
+                           class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-xs text-white">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Sort Order</label>
+                    <input name="sort_order" type="number" value="10"
+                           class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-xs text-white font-mono-num">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-3 gap-3">
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">URL / Code Slug</label>
+                    <input name="slug" placeholder="auto-generated"
+                           class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-xs text-slate-300 font-mono-num">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Icon Class (FA6)</label>
+                    <input id="categoryIconInput" name="icon" value="fa-ice-cream"
+                           oninput="document.getElementById('categoryModalPreviewIcon').className = 'fa-solid ' + this.value"
+                           class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-xs text-white font-mono-num">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Badge Color</label>
+                    <input name="color" type="color" value="#f59e0b"
+                           class="w-full h-9 rounded-xl bg-slate-900 border border-white/10 cursor-pointer">
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-[11px] text-slate-400 mb-1.5">Quick Pick Hospitality Icon:</label>
+                <div class="grid grid-cols-6 gap-1.5">
+                    <button type="button" onclick="LiterosApp.pickCategoryIcon('fa-blender')" class="py-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-white/10 text-slate-200 text-xs" title="Blender / Shakes"><i class="fa-solid fa-blender"></i></button>
+                    <button type="button" onclick="LiterosApp.pickCategoryIcon('fa-ice-cream')" class="py-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-white/10 text-slate-200 text-xs" title="Ice Cream / Gelato"><i class="fa-solid fa-ice-cream"></i></button>
+                    <button type="button" onclick="LiterosApp.pickCategoryIcon('fa-cake-candles')" class="py-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-white/10 text-slate-200 text-xs" title="Cakes & Pastries"><i class="fa-solid fa-cake-candles"></i></button>
+                    <button type="button" onclick="LiterosApp.pickCategoryIcon('fa-burger')" class="py-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-white/10 text-slate-200 text-xs" title="Burgers & Wraps"><i class="fa-solid fa-burger"></i></button>
+                    <button type="button" onclick="LiterosApp.pickCategoryIcon('fa-utensils')" class="py-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-white/10 text-slate-200 text-xs" title="Kitchen / Dining"><i class="fa-solid fa-utensils"></i></button>
+                    <button type="button" onclick="LiterosApp.pickCategoryIcon('fa-mug-hot')" class="py-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-white/10 text-slate-200 text-xs" title="Coffee / Hot Drinks"><i class="fa-solid fa-mug-hot"></i></button>
+                    <button type="button" onclick="LiterosApp.pickCategoryIcon('fa-martini-glass-citrus')" class="py-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-white/10 text-slate-200 text-xs" title="Mocktails / Smoothies"><i class="fa-solid fa-martini-glass-citrus"></i></button>
+                    <button type="button" onclick="LiterosApp.pickCategoryIcon('fa-cookie-bite')" class="py-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-white/10 text-slate-200 text-xs" title="Cookies & Waffles"><i class="fa-solid fa-cookie-bite"></i></button>
+                    <button type="button" onclick="LiterosApp.pickCategoryIcon('fa-pizza-slice')" class="py-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-white/10 text-slate-200 text-xs" title="Pizza & Savory"><i class="fa-solid fa-pizza-slice"></i></button>
+                    <button type="button" onclick="LiterosApp.pickCategoryIcon('fa-bowl-food')" class="py-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-white/10 text-slate-200 text-xs" title="Rice & Bowls"><i class="fa-solid fa-bowl-food"></i></button>
+                    <button type="button" onclick="LiterosApp.pickCategoryIcon('fa-drumstick-bite')" class="py-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-white/10 text-slate-200 text-xs" title="Grill & Wings"><i class="fa-solid fa-drumstick-bite"></i></button>
+                    <button type="button" onclick="LiterosApp.pickCategoryIcon('fa-champagne-glasses')" class="py-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-white/10 text-slate-200 text-xs" title="VIP / Party Platters"><i class="fa-solid fa-champagne-glasses"></i></button>
+                </div>
+            </div>
+
+            <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer pt-1">
+                <input type="checkbox" name="is_active" checked class="accent-amber-500">
+                <span>Active & Visible on POS Terminal Filter Bar</span>
+            </label>
+
+            <div class="flex justify-end gap-2 pt-2">
+                <button type="button" onclick="LiterosApp.closeModal('categoryModal')" class="px-4 py-2 rounded-xl bg-slate-800 text-xs text-slate-300">Cancel</button>
+                <button type="submit" class="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs">Save Category</button>
             </div>
         </form>
     </div>
@@ -1619,6 +1950,92 @@ declare(strict_types=1);
         </form>
     </div>
 
+    <!-- 7B. Finance & Coffers Deposit / Withdrawal Modal -->
+    <div id="cofferModal" class="hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+        <form id="cofferForm" onsubmit="LiterosApp.submitCofferForm(event)"
+              class="glass-panel rounded-2xl max-w-lg w-full p-6 border border-white/15 space-y-4">
+            <input type="hidden" name="id">
+            <div class="flex items-center justify-between border-b border-white/10 pb-3">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center">
+                        <i class="fa-solid fa-vault"></i>
+                    </div>
+                    <div>
+                        <h3 id="cofferModalTitle" class="font-bold text-base text-white">Coffers Treasury Entry</h3>
+                        <p class="text-[11px] text-slate-400">Add money manually to coffers or record a goods/market or normal withdrawal</p>
+                    </div>
+                </div>
+                <button type="button" onclick="LiterosApp.closeModal('cofferModal')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Entry Action *</label>
+                    <select id="cofferEntryTypeSelect" name="entry_type"
+                            onchange="LiterosApp.handleCofferEntryTypeChange(this.value)"
+                            class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-xs text-white font-bold">
+                        <option value="Withdrawal">Withdraw from Coffers (-)</option>
+                        <option value="Deposit">Add Money to Coffers (+)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Purpose / Withdrawal Type *</label>
+                    <select id="cofferPurposeTypeSelect" name="purpose_type"
+                            class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-xs text-amber-300 font-bold">
+                        <option value="Withdrawal for Goods / Market">Withdrawal for Goods / Market (Ingredients / Cooking)</option>
+                        <option value="Normal Withdrawal">Normal Withdrawal (General / Owner / Petty / Bank)</option>
+                        <option value="Manual Coffer Deposit">Manual Coffer Deposit (+)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-3 gap-3">
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Amount (GHS) *</label>
+                    <input name="amount" type="number" step="0.01" required placeholder="4500.00"
+                           class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-xs text-white font-mono-num font-bold">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Payment Channel</label>
+                    <select name="payment_channel" class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-xs text-white">
+                        <option value="Cash">Physical Cash</option>
+                        <option value="MoMo">MoMo (Mobile Money)</option>
+                        <option value="Bank Transfer">Bank Transfer</option>
+                        <option value="QR Pay">QR Pay</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Date *</label>
+                    <input name="transaction_date" type="date" required
+                           class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-xs text-white font-mono-num">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Branch Location</label>
+                    <select id="cofferFormBranchSelect" name="branch_id" class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-xs text-white"></select>
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Recipient / Market Vendor / Source</label>
+                    <input name="recipient_or_source" placeholder="e.g. Kejetia Central Market / Hajia Rabi"
+                           class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-xs text-white">
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-xs text-slate-400 mb-1">Detailed Purpose & Description *</label>
+                <input name="description" required placeholder="e.g. Monthly market withdrawal to buy flour, Biscoff, Nutella, cream & cooking supplies"
+                       class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-xs text-white">
+            </div>
+
+            <div class="flex justify-end gap-2 pt-2">
+                <button type="button" onclick="LiterosApp.closeModal('cofferModal')" class="px-4 py-2 rounded-xl bg-slate-800 text-xs text-slate-300">Cancel</button>
+                <button type="submit" class="px-5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-xs">Save Coffers Entry</button>
+            </div>
+        </form>
+    </div>
+
     <!-- 8. Quick Operator PIN Switcher Modal -->
     <div id="pinModal" class="hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
         <form onsubmit="LiterosApp.submitPinSwitch(event)"
@@ -1628,7 +2045,7 @@ declare(strict_types=1);
             </div>
             <div>
                 <h3 class="font-bold text-base text-white">Operator PIN Switch</h3>
-                <p class="text-[11px] text-slate-400 mt-1">Demo PINs: <strong class="text-amber-300">1111</strong> (Hajia Rabi), <strong class="text-emerald-300">2101</strong> (Mgr), <strong class="text-indigo-300">2102</strong> (Cashier)</p>
+                <p class="text-[11px] text-slate-400 mt-1">Demo PINs: <strong class="text-amber-300">1111</strong> (Hajia Rabi), <strong class="text-emerald-300">1001</strong> (Zainab), <strong class="text-indigo-300">2001</strong> (Matilda)</p>
             </div>
             <input id="quickPinInput" type="password" maxlength="8" required placeholder="••••"
                    class="w-full py-3 rounded-xl bg-slate-950 border border-white/15 text-center font-mono-num text-xl tracking-widest text-white outline-none focus:border-amber-500">
@@ -1738,16 +2155,16 @@ declare(strict_types=1);
                     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-white/10">
                         <div>
                             <span class="px-2.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold uppercase tracking-wider">
-                                Shakes and Dessert • 31 Seeded Personnel
+                                Shakes and Dessert • 19 Seeded Personnel
                             </span>
                             <h3 class="text-base font-bold text-white mt-1.5">Click Any Demo Account Below to Auto-Fill & Sign In</h3>
-                            <p class="text-xs text-slate-400">Owner Hajia Rabi Adam + 3 Kumasi Branches (Ayiduase, Sawaba, Dechemso — each with 1 Manager, 1 Cashier, 4 Waitresses, 4 Chefs):</p>
+                            <p class="text-xs text-slate-400">Owner Hajia Rabi Adam + Ayiduase (Zainab, Yasmine, Aisha, Latif, Samuel, Fati, Dorithy), Sawaba (Baki, Aisha, Maabena, Fati) & Dechemso (Kudus, Matilda, Daniel, Mary, Nat, Theresah, Belinda):</p>
                         </div>
                     </div>
 
                     <!-- Branch Filter Pills for Login Credentials -->
                     <div id="loginBranchFilterBar" class="flex flex-wrap items-center gap-1.5 mt-3">
-                        <button type="button" data-bfilter="all" onclick="LiterosApp.setLoginBranchFilter('all')" class="login-bfilter-btn px-2.5 py-1 rounded-lg bg-amber-500 text-slate-950 text-[11px] font-extrabold">All Staff (31)</button>
+                        <button type="button" data-bfilter="all" onclick="LiterosApp.setLoginBranchFilter('all')" class="login-bfilter-btn px-2.5 py-1 rounded-lg bg-amber-500 text-slate-950 text-[11px] font-extrabold">All Staff (19)</button>
                         <button type="button" data-bfilter="1" onclick="LiterosApp.setLoginBranchFilter('1')" class="login-bfilter-btn px-2.5 py-1 rounded-lg bg-slate-900 border border-white/10 text-slate-300 text-[11px] font-semibold">Branch 1: Ayiduase</button>
                         <button type="button" data-bfilter="2" onclick="LiterosApp.setLoginBranchFilter('2')" class="login-bfilter-btn px-2.5 py-1 rounded-lg bg-slate-900 border border-white/10 text-slate-300 text-[11px] font-semibold">Branch 2: Sawaba</button>
                         <button type="button" data-bfilter="3" onclick="LiterosApp.setLoginBranchFilter('3')" class="login-bfilter-btn px-2.5 py-1 rounded-lg bg-slate-900 border border-white/10 text-slate-300 text-[11px] font-semibold">Branch 3: Dechemso</button>

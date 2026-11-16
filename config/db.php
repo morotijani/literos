@@ -46,13 +46,20 @@ class Database {
             // Check if company_profile is already seeded with "Shakes and Dessert" and expenditures table exists
             $needsSeed = false;
             try {
-                $stmt = $pdo->query("SHOW TABLES LIKE 'expenditures'");
+                $stmt = $pdo->query("SHOW TABLES LIKE 'coffers_ledger'");
                 if ($stmt->rowCount() === 0) {
                     $needsSeed = true;
                 } else {
                     $compName = (string)$pdo->query("SELECT name FROM company_profile LIMIT 1")->fetchColumn();
                     $orderCount = (int)$pdo->query("SELECT COUNT(*) FROM orders")->fetchColumn();
-                    if ($compName !== 'Shakes and Dessert' || $orderCount < 500) {
+                    $catCount = (int)$pdo->query("SELECT COUNT(*) FROM categories")->fetchColumn();
+                    $coffersCount = (int)$pdo->query("SELECT COUNT(*) FROM coffers_ledger")->fetchColumn();
+                    $taxTipSum = (float)$pdo->query("SELECT COALESCE(SUM(tax_amount + service_charge + tip_amount), 0) FROM orders")->fetchColumn();
+                    $oldSeed = (int)$pdo->query("SELECT COUNT(*) FROM staff WHERE employee_code = 'AYI-MGR' AND full_name LIKE '%Alhaji Sulemana%'")->fetchColumn();
+                    $decBreakMax = (float)$pdo->query("SELECT COALESCE(MAX(total_amount), 0) FROM orders WHERE branch_id = 3 AND created_at >= '2026-05-02 00:00:00' AND created_at <= '2026-07-26 23:59:59'")->fetchColumn();
+                    $sawClosureCount = (int)$pdo->query("SELECT COUNT(*) FROM orders WHERE branch_id = 2 AND created_at >= '2024-11-01 00:00:00' AND created_at <= '2025-11-30 23:59:59'")->fetchColumn();
+                    $recentSlumpAvg = (float)$pdo->query("SELECT COALESCE(SUM(total_amount), 0) / 75.0 FROM orders WHERE created_at >= '2026-09-01 00:00:00' AND created_at <= '2026-11-14 23:59:59'")->fetchColumn();
+                    if ($compName !== 'Shakes and Dessert' || $orderCount < 500 || $catCount < 11 || $coffersCount < 20 || $taxTipSum > 0 || $oldSeed > 0 || $decBreakMax > 3500 || $sawClosureCount > 0 || $recentSlumpAvg > 42000) {
                         $needsSeed = true;
                     }
                 }
@@ -111,13 +118,20 @@ class Database {
 
         $needsSeed = false;
         try {
-            $check = $pdo->query("SELECT name FROM sqlite_master WHERE type='table' AND name='expenditures'")->fetch();
+            $check = $pdo->query("SELECT name FROM sqlite_master WHERE type='table' AND name='coffers_ledger'")->fetch();
             if (!$check) {
                 $needsSeed = true;
             } else {
                 $compName = (string)$pdo->query("SELECT name FROM company_profile LIMIT 1")->fetchColumn();
                 $orderCount = (int)$pdo->query("SELECT COUNT(*) FROM orders")->fetchColumn();
-                if ($compName !== 'Shakes and Dessert' || $orderCount < 500) {
+                $catCount = (int)$pdo->query("SELECT COUNT(*) FROM categories")->fetchColumn();
+                $coffersCount = (int)$pdo->query("SELECT COUNT(*) FROM coffers_ledger")->fetchColumn();
+                $taxTipSum = (float)$pdo->query("SELECT COALESCE(SUM(tax_amount + service_charge + tip_amount), 0) FROM orders")->fetchColumn();
+                $oldSeed = (int)$pdo->query("SELECT COUNT(*) FROM staff WHERE employee_code = 'AYI-MGR' AND full_name LIKE '%Alhaji Sulemana%'")->fetchColumn();
+                $decBreakMax = (float)$pdo->query("SELECT COALESCE(MAX(total_amount), 0) FROM orders WHERE branch_id = 3 AND created_at >= '2026-05-02 00:00:00' AND created_at <= '2026-07-26 23:59:59'")->fetchColumn();
+                $sawClosureCount = (int)$pdo->query("SELECT COUNT(*) FROM orders WHERE branch_id = 2 AND created_at >= '2024-11-01 00:00:00' AND created_at <= '2025-11-30 23:59:59'")->fetchColumn();
+                $recentSlumpAvg = (float)$pdo->query("SELECT COALESCE(SUM(total_amount), 0) / 75.0 FROM orders WHERE created_at >= '2026-09-01 00:00:00' AND created_at <= '2026-11-14 23:59:59'")->fetchColumn();
+                if ($compName !== 'Shakes and Dessert' || $orderCount < 500 || $catCount < 11 || $coffersCount < 20 || $taxTipSum > 0 || $oldSeed > 0 || $decBreakMax > 3500 || $sawClosureCount > 0 || $recentSlumpAvg > 42000) {
                     $needsSeed = true;
                 }
             }
@@ -135,6 +149,7 @@ class Database {
     private static function seedSqliteSchema(PDO $pdo): void {
         $pdo->exec("
             PRAGMA foreign_keys = OFF;
+            DROP TABLE IF EXISTS coffers_ledger;
             DROP TABLE IF EXISTS expenditures;
             DROP TABLE IF EXISTS order_items;
             DROP TABLE IF EXISTS orders;
@@ -155,8 +170,8 @@ class Database {
                 logo_text TEXT DEFAULT 'S&D',
                 currency_symbol TEXT DEFAULT 'GHS ',
                 currency_code TEXT DEFAULT 'GHS',
-                tax_rate REAL DEFAULT 6.00,
-                service_charge_rate REAL DEFAULT 2.50,
+                tax_rate REAL DEFAULT 0.00,
+                service_charge_rate REAL DEFAULT 0.00,
                 email TEXT DEFAULT 'hajia.rabi@shakesanddessertgh.com',
                 phone TEXT DEFAULT '+233 24 489 1020',
                 address TEXT DEFAULT 'KNUST Commercial Road, Ayiduase, Kumasi, Ashanti Region, Ghana',
@@ -305,6 +320,23 @@ class Database {
             );
 
             CREATE INDEX idx_exp_date ON expenditures(expense_date);
+
+            CREATE TABLE coffers_ledger (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                reference_no TEXT NOT NULL UNIQUE,
+                branch_id INTEGER NOT NULL,
+                staff_id INTEGER NOT NULL,
+                entry_type TEXT NOT NULL DEFAULT 'Withdrawal',
+                purpose_type TEXT NOT NULL DEFAULT 'Withdrawal for Goods / Market',
+                payment_channel TEXT NOT NULL DEFAULT 'Cash',
+                amount REAL NOT NULL DEFAULT 0.00,
+                recipient_or_source TEXT DEFAULT NULL,
+                description TEXT NOT NULL,
+                transaction_date TEXT NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE INDEX idx_coffers_date ON coffers_ledger(transaction_date);
         ");
 
         $schemaPath = __DIR__ . '/../database/schema.sql';
@@ -342,45 +374,39 @@ class Database {
     private static function seedHistoricalData(PDO $pdo): void {
         mt_srand(20241114); // Deterministic seed for consistent analytics
 
-        $menuCatalog = [
-            1  => ['name' => "Hajia's Royal Lotus Biscoff Freakshake", 'price' => 95.0,  'cost' => 32.0],
-            2  => ['name' => "Nutella Ferrero Rocher Monster Shake",   'price' => 110.0, 'cost' => 38.0],
-            3  => ['name' => "Oreo Cookies & Cream Supreme Shake",     'price' => 85.0,  'cost' => 27.0],
-            4  => ['name' => "Salted Caramel & Roasted Pistachio Shake", 'price' => 105.0, 'cost' => 36.0],
-            5  => ['name' => "Belgian Liege Waffle & Gelato Trio",     'price' => 135.0, 'cost' => 44.0],
-            6  => ['name' => "Sizzling Brownie Skillet Sundae",        'price' => 125.0, 'cost' => 40.0],
-            7  => ['name' => "Kunafa Pistachio Chocolate Crepe (Dubai Style)", 'price' => 145.0, 'cost' => 48.0],
-            8  => ['name' => "San Sebastián Burnt Basque Cheesecake",  'price' => 115.0, 'cost' => 36.0],
-            9  => ['name' => "Red Velvet & Cream Cheese Tres Leches",  'price' => 95.0,  'cost' => 30.0],
-            10 => ['name' => "Ayiduase Loaded Double Beef Smash Burger & Fries", 'price' => 140.0, 'cost' => 52.0],
-            11 => ['name' => "Kumasi Spicy Chicken & Cheese Shawarma Platter", 'price' => 115.0, 'cost' => 42.0],
-            12 => ['name' => "Honey-Suya Glazed Crispy Chicken Wings (10pcs)", 'price' => 130.0, 'cost' => 46.0],
-            13 => ['name' => "Brown Sugar Tiger Milk Boba Tea",        'price' => 75.0,  'cost' => 22.0],
-            14 => ['name' => "Tropical Mango, Passion & Hibiscus Sobolo Cooler", 'price' => 65.0, 'cost' => 18.0],
-            15 => ['name' => "Hajia's Grand Family & Fiesta Dessert Platter", 'price' => 580.0, 'cost' => 195.0],
-        ];
+        $rows = $pdo->query("SELECT id, name, price, cost FROM menu_items ORDER BY id ASC")->fetchAll();
+        $menuCatalog = [];
+        foreach ($rows as $r) {
+            $menuCatalog[(int)$r['id']] = [
+                'name'  => (string)$r['name'],
+                'price' => (float)$r['price'],
+                'cost'  => (float)$r['cost'],
+            ];
+        }
+        $menuIds = array_keys($menuCatalog);
+        $menuCount = count($menuIds);
 
-        // Branch staff & table pools
+        // Branch staff & table pools (exact Shakes & Dessert personnel per branch)
         $branchConfig = [
             1 => [
                 'weight' => 0.42, // Ayiduase (KNUST Flagship)
-                'waiters' => [4, 5, 6, 7],
-                'cashier' => 3,
-                'manager' => 2,
+                'waiters' => [3, 4, 5, 6], // Yasmine, Aisha (Ayiduase), Latif, Samuel
+                'cashier' => 2,            // Zainab (Branch Manager)
+                'manager' => 2,            // Zainab
                 'tables' => [1, 2, 3, 4, 5, 6, 7, 8],
             ],
             2 => [
-                'weight' => 0.31, // Sawaba
-                'waiters' => [14, 15, 16, 17],
-                'cashier' => 13,
-                'manager' => 12,
+                'weight' => 0.30, // Sawaba
+                'waiters' => [10],         // Aisha (Sawaba)
+                'cashier' => 9,            // Baki (Manager/Supervisor)
+                'manager' => 9,            // Baki
                 'tables' => [9, 10, 11, 12],
             ],
             3 => [
-                'weight' => 0.27, // Dechemso
-                'waiters' => [24, 25, 26, 27],
-                'cashier' => 23,
-                'manager' => 22,
+                'weight' => 0.28, // Dechemso
+                'waiters' => [15, 16, 17], // Daniel, Mary, Nat
+                'cashier' => 14,           // Matilda (Cashier)
+                'manager' => 13,           // Kudus (Branch Manager)
                 'tables' => [13, 14, 15],
             ],
         ];
@@ -419,6 +445,12 @@ class Database {
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
 
+        $insCoffer = $pdo->prepare("
+            INSERT INTO coffers_ledger (
+                reference_no, branch_id, staff_id, entry_type, purpose_type, payment_channel, amount, recipient_or_source, description, transaction_date, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ");
+
         $startDate = new DateTimeImmutable('2024-01-01');
         $endDate   = new DateTimeImmutable('2026-11-14');
         $currDate  = $startDate;
@@ -426,6 +458,58 @@ class Database {
         $orderSeq = 10000;
         $orderIdCounter = 1;
         $expSeq = 5000;
+        $cofferSeq = 1000;
+
+        $marketWithdrawalTemplates = [
+            [
+                'recipient' => 'Kejetia Central Market & ColdStore Run (Hajia Rabi & Chef Fati)',
+                'desc' => 'Monthly bulk market purchase: flour, eggs, Lotus Biscoff spread, Nutella tubs, fresh whipping cream, milk & berries',
+                'channel' => 'Cash'
+            ],
+            [
+                'recipient' => 'Asafo & Ayeduasi Wholesale Market Supply Run (Maabena & Theresah)',
+                'desc' => 'Mid-month market restock: chicken wings, Irish potatoes for Loaded Fries, mozzarella cheese, cooking oil, syrups & waffle mix',
+                'channel' => 'MoMo'
+            ],
+            [
+                'recipient' => 'Kumasi Dairy, Fruit & Packaging Market Procurement',
+                'desc' => 'Market purchase of fresh strawberries, mangoes, pineapples, ice cream base, Crazy Shake cups & takeaway boxes',
+                'channel' => 'Cash'
+            ],
+        ];
+
+        $normalWithdrawalTemplates = [
+            [
+                'recipient' => 'Hajia Rabi Adam (Executive Owner Drawing)',
+                'desc' => 'Normal coffers withdrawal — Monthly owner personal drawing & family reserve',
+                'channel' => 'Bank Transfer',
+                'min' => 3500,
+                'max' => 6500
+            ],
+            [
+                'recipient' => 'Branch Petty Cash & Staff Welfare Allowance',
+                'desc' => 'Normal withdrawal — Staff transport allowance, weekend rush bonus & branch petty cash float',
+                'channel' => 'Cash',
+                'min' => 1800,
+                'max' => 3400
+            ],
+            [
+                'recipient' => 'Utility, ECG Power & Store Rent Reserve',
+                'desc' => 'Normal withdrawal — Monthly ECG prepaid top-up, water & shop maintenance reserve',
+                'channel' => 'MoMo',
+                'min' => 2200,
+                'max' => 4200
+            ],
+        ];
+
+        // Initial Opening Coffer Float Deposit by Hajia Rabi Adam on Jan 1, 2024
+        $cofferSeq++;
+        $insCoffer->execute([
+            'COF-' . $cofferSeq, 1, 1, 'Deposit', 'Manual Coffer Deposit', 'Bank Transfer',
+            45000.00, 'Hajia Rabi Adam (Owner Capital Float)',
+            'Opening Shakes & Dessert Treasury Coffers Float across Ayeduasi, Sawaba & Dichemso branches',
+            '2024-01-01', '2024-01-01 08:15:00'
+        ]);
 
         $expenseTemplates = [
             ['cat' => 'Ingredients & Dairy', 'title' => 'Bulk Fresh Cream, Jersey Milk & Belgian Chocolate Supply', 'vendor' => 'Kumasi ColdStore & Dairy Ltd', 'method' => 'MoMo', 'min' => 6500, 'max' => 12500],
@@ -443,6 +527,8 @@ class Database {
             $dateStr = $currDate->format('Y-m-d');
             $isWeekend = ($dayOfWeek >= 5); // Friday, Saturday, Sunday
 
+            $isRecentSlump = ($dateStr >= '2026-09-01');
+
             // Determine daily company-wide target revenue in GHS
             if ($year === 2024) {
                 // Booming year 1
@@ -454,26 +540,80 @@ class Database {
                 $companyDailyTarget = $isWeekend
                     ? (float)mt_rand(78000, 112000)
                     : (float)mt_rand(51000, 66000);
+            } elseif ($isRecentSlump) {
+                // Past 3 months (Sep - Nov 2026): bad sales across all three branches (~GHS 30,000 - 40,000/day combined)
+                $companyDailyTarget = $isWeekend
+                    ? (float)mt_rand(35500, 40500)
+                    : (float)mt_rand(30000, 35500);
             } else {
-                // 2026: Business is down compared to 2024/2025 boom, but still healthy/good
+                // Early-to-mid 2026: Business is down compared to 2024/2025 boom, but still healthy/good
                 $companyDailyTarget = $isWeekend
                     ? (float)mt_rand(48000, 69000)
                     : (float)mt_rand(31000, 43000);
             }
 
-            // Festive boost in December & Eid/Graduation months
-            if ($month === 12 || $month === 4 || $month === 11) {
+            // Festive boost in December & Eid/Graduation months (skip during the Sep-Nov 2026 slump)
+            if (!$isRecentSlump && ($month === 12 || $month === 4 || $month === 11)) {
                 $companyDailyTarget *= 1.08;
             }
 
-            // Create 4 consolidated shift/group orders per day across the 3 branches
+            // Pre-compute Sawaba target when active in late 2025/2026 so company-wide 3-month slump stays GHS 30k-40k/day
+            $sawabaOverrideTarget = null;
+            if ($dateStr >= '2025-12-01' && $dateStr <= '2026-08-31') {
+                $sawabaOverrideTarget = $isWeekend
+                    ? (float)mt_rand(23000, 27000)
+                    : (float)mt_rand(19500, 23000);
+            } elseif ($dateStr >= '2026-09-01' && $dateStr <= '2026-09-30') {
+                $sawabaOverrideTarget = $isWeekend
+                    ? (float)mt_rand(20500, 22000)
+                    : (float)mt_rand(19500, 21000);
+            } elseif ($dateStr >= '2026-10-01') {
+                $sawabaOverrideTarget = $isWeekend
+                    ? (float)mt_rand(10200, 12200)
+                    : (float)mt_rand(8200, 10200);
+            }
+
+            // Dechemso branch (ID 3) incident closure & deep-cleaning break: 2026-05-02 to 2026-07-26 (reopens 2026-07-27)
+            $isDechemsoBreakPeriod = ($dateStr >= '2026-05-02' && $dateStr <= '2026-07-26');
+
+            // Sawaba branch (ID 2) incident closure: 2024-11-01 to 2025-11-30 (0 sales; reopens 2025-12-01)
+            $isSawabaClosurePeriod = ($dateStr >= '2024-11-01' && $dateStr <= '2025-11-30');
+
+            // Create consolidated shift/group orders per day across the 3 branches
             // so total daily revenue matches $companyDailyTarget and 35% MoMo / 60% Cash / 5% QR Pay
             foreach ([1, 2, 3] as $bId) {
                 $bCfg = $branchConfig[$bId];
-                $branchDailyTarget = $companyDailyTarget * $bCfg['weight'];
 
-                // 2 consolidated orders per branch per day (Afternoon & Evening Rush)
-                $numOrders = ($isWeekend && $bId === 1) ? 2 : 1;
+                // Sawaba completely closed Nov 2024 - Nov 2025 (0 sales)
+                if ($bId === 2 && $isSawabaClosurePeriod) {
+                    continue;
+                }
+
+                // During Dechemso's closure break (May 2 - late July 2026):
+                // Not every day had sales (~52% days have 0 orders); active days only have small Loaded Fries sales totaling GHS 1,500 - 3,000/day
+                $inDechemsoBreak = ($bId === 3 && $isDechemsoBreakPeriod);
+                if ($inDechemsoBreak && mt_rand(1, 100) <= 52) {
+                    continue;
+                }
+
+                if ($isRecentSlump && $sawabaOverrideTarget !== null) {
+                    // Distribute recent 3-month downturn across all 3 branches totaling ~GHS 30,000 - 40,000/day
+                    $remainingTarget = max(12000.0, $companyDailyTarget - $sawabaOverrideTarget);
+                    if ($bId === 2) {
+                        $branchDailyTarget = $sawabaOverrideTarget;
+                    } elseif ($bId === 1) {
+                        $branchDailyTarget = $remainingTarget * 0.60;
+                    } else {
+                        $branchDailyTarget = $remainingTarget * 0.40;
+                    }
+                } else {
+                    $branchDailyTarget = ($bId === 2 && $sawabaOverrideTarget !== null)
+                        ? $sawabaOverrideTarget
+                        : ($companyDailyTarget * $bCfg['weight']);
+                }
+
+                // 2 consolidated orders per branch per day (Afternoon & Evening Rush), 1 small batch during Dechemso break
+                $numOrders = $inDechemsoBreak ? 1 : (($isWeekend && $bId === 1) ? 2 : 1);
                 $targetPerOrder = $branchDailyTarget / $numOrders;
 
                 for ($k = 0; $k < $numOrders; $k++) {
@@ -492,37 +632,70 @@ class Database {
 
                     $waiterId = $bCfg['waiters'][array_rand($bCfg['waiters'])];
                     $tableId = $bCfg['tables'][array_rand($bCfg['tables'])];
-                    $ordType = $orderTypes[array_rand($orderTypes)];
-                    $custName = $customerNames[array_rand($customerNames)];
-                    $guests = mt_rand(8, 32);
 
-                    // Pick 2 menu items and scale quantities to hit $targetPerOrder
-                    $itemId1 = mt_rand(1, 7);   // Signature Shake or Waffle/Crepe
-                    $itemId2 = mt_rand(8, 15);  // Grill/Shawarma/Cake/Platter
-                    $m1 = $menuCatalog[$itemId1];
-                    $m2 = $menuCatalog[$itemId2];
+                    if ($inDechemsoBreak) {
+                        // Small break-period takeaway/delivery sales of Loaded Fries ONLY (GHS 1,500.00 - GHS 3,000.00/day)
+                        $ordType = (mt_rand(1, 100) <= 70) ? 'Takeaway' : 'Delivery';
+                        $custName = 'Dechemso Break-Period Loaded Fries Takeaway';
+                        $guests = mt_rand(2, 6);
+                        $orderNote = 'Incident closure break (May 2 - late July 2026): small Loaded Fries sales only';
 
-                    // Tax (6%) + Service Charge (2.5% for Dine-In) = 8.5%
-                    $svcRate = ($ordType === 'Dine-In') ? 0.025 : 0.0;
-                    $taxRate = 0.06;
-                    $targetSubtotal = $targetPerOrder / (1.0 + $taxRate + $svcRate);
+                        $m1 = $menuCatalog[65]; // Loaded Fries (150 GHc)
+                        $m2 = $menuCatalog[66]; // Loaded Fries (180 GHc)
 
-                    $halfSub = $targetSubtotal * 0.52;
-                    $qty1 = max(1, (int)round($halfSub / $m1['price']));
-                    $line1 = round($qty1 * $m1['price'], 2);
+                        // Pick exact combinations of 150 GHc & 180 GHc Loaded Fries strictly within GHS 1,500 - 3,000
+                        $qty1 = mt_rand(4, 10); // 600 .. 1500
+                        $maxQty2 = max(1, (int)floor((3000 - ($qty1 * 150)) / 180));
+                        $minQty2 = max(1, (int)ceil((1500 - ($qty1 * 150)) / 180));
+                        $qty2 = ($minQty2 <= $maxQty2) ? mt_rand($minQty2, $maxQty2) : $minQty2;
 
-                    $remSub = max($m2['price'], $targetSubtotal - $line1);
-                    $qty2 = max(1, (int)round($remSub / $m2['price']));
-                    $line2 = round($qty2 * $m2['price'], 2);
+                        $line1 = round($qty1 * $m1['price'], 2);
+                        $line2 = round($qty2 * $m2['price'], 2);
+                        $itemId1 = 65;
+                        $itemId2 = 66;
+                    } else {
+                        $ordType = $orderTypes[array_rand($orderTypes)];
+                        $custName = $customerNames[array_rand($customerNames)];
+                        $guests = mt_rand(8, 32);
+                        $orderNote = 'Daily consolidated shift batch';
 
+                        // Pick 2 menu items heavily weighted toward Top Sellers:
+                        // Crazy Shakes category (IDs 22..27) and Loaded Fries 150 & 180 (IDs 65, 66)
+                        $crazyShakeIds = [22, 23, 24, 25, 26, 27];
+                        $loadedFriesIds = [65, 66];
+                        if (mt_rand(1, 100) <= 68) {
+                            $itemId1 = $crazyShakeIds[array_rand($crazyShakeIds)];
+                        } else {
+                            $itemId1 = $menuIds[mt_rand(0, max(0, (int)floor($menuCount / 2) - 1))];
+                        }
+
+                        if (mt_rand(1, 100) <= 65) {
+                            $itemId2 = $loadedFriesIds[array_rand($loadedFriesIds)];
+                        } else {
+                            $itemId2 = $menuIds[mt_rand((int)floor($menuCount / 2), max(0, $menuCount - 1))];
+                        }
+                        $m1 = $menuCatalog[$itemId1];
+                        $m2 = $menuCatalog[$itemId2];
+
+                        $targetSubtotal = $targetPerOrder;
+                        $halfSub = $targetSubtotal * 0.52;
+                        $qty1 = max(1, (int)round($halfSub / $m1['price']));
+                        $line1 = round($qty1 * $m1['price'], 2);
+
+                        $remSub = max($m2['price'], $targetSubtotal - $line1);
+                        $qty2 = max(1, (int)round($remSub / $m2['price']));
+                        $line2 = round($qty2 * $m2['price'], 2);
+                    }
+
+                    // Shakes and Dessert: 0.00 Taxes, 0.00 Service Charge, 0.00 Tips
                     $subtotal = round($line1 + $line2, 2);
                     $discount = 0.00;
-                    $taxAmt = round($subtotal * $taxRate, 2);
-                    $svcAmt = round($subtotal * $svcRate, 2);
-                    $tipAmt = ($isWeekend && mt_rand(1, 100) <= 45) ? (float)(mt_rand(5, 25) * 10) : 0.00;
-                    $totalAmt = round($subtotal + $taxAmt + $svcAmt + $tipAmt, 2);
+                    $taxAmt = 0.00;
+                    $svcAmt = 0.00;
+                    $tipAmt = 0.00;
+                    $totalAmt = $subtotal;
 
-                    $hour = ($k === 0) ? mt_rand(11, 15) : mt_rand(17, 21);
+                    $hour = $inDechemsoBreak ? mt_rand(13, 18) : (($k === 0) ? mt_rand(11, 15) : mt_rand(17, 21));
                     $min = mt_rand(10, 58);
                     $createdAt = sprintf('%s %02d:%02d:00', $dateStr, $hour, $min);
                     $completedAt = sprintf('%s %02d:%02d:00', $dateStr, min(23, $hour + 1), $min);
@@ -531,7 +704,7 @@ class Database {
                         $orderNumber, $bId, ($ordType === 'Dine-In' ? $tableId : null), $waiterId,
                         $custName, $guests, $ordType, 'Completed', 'Paid', $payMethod,
                         $subtotal, $taxAmt, $svcAmt, $discount, $tipAmt, $totalAmt,
-                        $totalAmt, 'Daily consolidated shift batch', $createdAt, $completedAt
+                        $totalAmt, $orderNote, $createdAt, $completedAt
                     ]);
 
                     $currentOrderId = (int)$pdo->lastInsertId();
@@ -547,11 +720,45 @@ class Database {
                 }
             }
 
-            // Seed Operating Expenditures every 3 days across branches
+            // Seed Operating Expenditures every 3 days across branches (pause regular stock expenses during Dechemso/Sawaba closures)
             $dayOfYear = (int)$currDate->format('z');
+            if ($dateStr === '2024-11-05' || $dateStr === '2025-11-25') {
+                // Deep cleaning, sanitization & reopening preparation vouchers for Sawaba incident closure
+                $expSeq++;
+                $sawCleanTitle = ($dateStr === '2024-11-05')
+                    ? 'Sawaba Branch Incident Closure — Deep Cleaning, Sanitizing & Equipment Audit'
+                    : 'Sawaba Branch Reopening Prep — Refurbishment, Deep Cleaning & Cold-Chain Servicing';
+                $insExp->execute([
+                    'EXP-' . $expSeq, 2, $branchConfig[2]['manager'], 'Equipment & Maintenance',
+                    $sawCleanTitle, 'Kumasi CleanPro & Cold-Chain Services',
+                    'MoMo', ($dateStr === '2024-11-05' ? 4800.00 : 6500.00), $dateStr,
+                    'Approved by Baki (Supervisor) & Hajia Rabi Adam HQ',
+                    $dateStr . ' 10:00:00'
+                ]);
+            }
+            if ($dateStr === '2026-05-05' || $dateStr === '2026-07-20') {
+                // Deep cleaning, sanitization & reopening maintenance voucher for Dechemso incident break
+                $expSeq++;
+                $cleanTitle = ($dateStr === '2026-05-05')
+                    ? 'Dechemso Branch Incident Break — Deep Cleaning, Equipment Sanitizing & Audit'
+                    : 'Dechemso Branch Pre-Reopening Deep Cleaning, Fryer Servicing & Restock Prep';
+                $insExp->execute([
+                    'EXP-' . $expSeq, 3, $branchConfig[3]['manager'], 'Equipment & Maintenance',
+                    $cleanTitle, 'Kumasi CleanPro & Cold-Chain Services',
+                    'MoMo', ($dateStr === '2026-05-05' ? 4200.00 : 5800.00), $dateStr,
+                    'Approved by Kudus (Branch Manager) & Hajia Rabi Adam HQ',
+                    $dateStr . ' 10:00:00'
+                ]);
+            }
             if ($dayOfYear % 3 === 0) {
                 $expBranchId = ($dayOfYear % 3) + 1;
                 foreach ([1, 2, 3] as $bId) {
+                    if ($bId === 2 && $isSawabaClosurePeriod) {
+                        continue; // Skip regular bulk branch expenses while Sawaba is closed
+                    }
+                    if ($bId === 3 && $isDechemsoBreakPeriod) {
+                        continue; // Skip regular bulk branch expenses while Dechemso is on closure break
+                    }
                     $tpl = $expenseTemplates[($dayOfYear + $bId) % count($expenseTemplates)];
                     $expSeq++;
                     $refNo = 'EXP-' . $expSeq;
@@ -568,41 +775,121 @@ class Database {
                 }
             }
 
+            // Seed Monthly Finance & Coffers Entries:
+            // 1) Market / Goods Withdrawals (~GHS 8,500+ to GHS 10,600 per month split across 2 market trips on day 3 and day 17)
+            // 2) Normal Withdrawals (on day 10 and day 25)
+            // 3) Periodic Manual Coffer Deposits (on day 14 of quarterly/event months)
+            $dayOfMonth = (int)$currDate->format('j');
+            if ($dayOfMonth === 3) {
+                // First monthly market & ingredients purchase withdrawal (~GHS 4,600 - 5,600)
+                $cofferSeq++;
+                $mTpl = $marketWithdrawalTemplates[($month + $year) % count($marketWithdrawalTemplates)];
+                $mktAmt1 = (float)mt_rand(4600, 5600);
+                $insCoffer->execute([
+                    'COF-' . $cofferSeq, 1, 1, 'Withdrawal', 'Withdrawal for Goods / Market', $mTpl['channel'],
+                    $mktAmt1, $mTpl['recipient'], $mTpl['desc'] . ' (First Monthly Market Trip)',
+                    $dateStr, $dateStr . ' 07:45:00'
+                ]);
+            } elseif ($dayOfMonth === 17) {
+                // Second monthly market & cooking supplies withdrawal (~GHS 4,100 - 5,200) -> Total monthly Market Withdrawal = GHS 8,700 - 10,800+
+                $cofferSeq++;
+                $mTpl = $marketWithdrawalTemplates[($month + $year + 1) % count($marketWithdrawalTemplates)];
+                $mktAmt2 = (float)mt_rand(4100, 5200);
+                $branchForMkt = (($month % 3) + 1);
+                if (($branchForMkt === 3 && $isDechemsoBreakPeriod) || ($branchForMkt === 2 && $isSawabaClosurePeriod)) {
+                    $branchForMkt = 1; // Reroute bulk market run to Ayiduase while branch is closed/on break
+                }
+                $staffForMkt = $branchConfig[$branchForMkt]['manager'];
+                $insCoffer->execute([
+                    'COF-' . $cofferSeq, $branchForMkt, $staffForMkt, 'Withdrawal', 'Withdrawal for Goods / Market', $mTpl['channel'],
+                    $mktAmt2, $mTpl['recipient'], $mTpl['desc'] . ' (Mid-Month Market & Cooking Supplies Replenishment)',
+                    $dateStr, $dateStr . ' 08:20:00'
+                ]);
+            } elseif ($dayOfMonth === 10) {
+                // Normal withdrawal #1 (Staff Welfare / Petty Cash / Utility Reserve)
+                $cofferSeq++;
+                $nTpl = $normalWithdrawalTemplates[($month) % count($normalWithdrawalTemplates)];
+                $normAmt = (float)mt_rand($nTpl['min'], $nTpl['max']);
+                $branchForNorm = (($month + 1) % 3) + 1;
+                if ($branchForNorm === 3 && $isDechemsoBreakPeriod) {
+                    $branchForNorm = 2;
+                } elseif ($branchForNorm === 2 && $isSawabaClosurePeriod) {
+                    $branchForNorm = 1;
+                }
+                $insCoffer->execute([
+                    'COF-' . $cofferSeq, $branchForNorm, 1, 'Withdrawal', 'Normal Withdrawal', $nTpl['channel'],
+                    $normAmt, $nTpl['recipient'], $nTpl['desc'],
+                    $dateStr, $dateStr . ' 14:10:00'
+                ]);
+            } elseif ($dayOfMonth === 26) {
+                // Normal withdrawal #2 (Owner Drawing / Bank Reserve Sweep)
+                $cofferSeq++;
+                $nTpl = $normalWithdrawalTemplates[0];
+                $normAmt2 = (float)mt_rand(3800, 6200);
+                $insCoffer->execute([
+                    'COF-' . $cofferSeq, 1, 1, 'Withdrawal', 'Normal Withdrawal', 'Bank Transfer',
+                    $normAmt2, $nTpl['recipient'], $nTpl['desc'],
+                    $dateStr, $dateStr . ' 16:40:00'
+                ]);
+            } elseif ($dayOfMonth === 14 && ($month % 2 === 0)) {
+                // Periodic Manual Coffer Deposit (Event catering advance / owner float injection)
+                $cofferSeq++;
+                $depAmt = (float)mt_rand(6000, 15000);
+                $insCoffer->execute([
+                    'COF-' . $cofferSeq, 1, 1, 'Deposit', 'Manual Coffer Deposit', 'MoMo',
+                    $depAmt, 'Hajia Rabi Adam / VIP Event Catering Advance',
+                    'Manual coffer deposit from wedding/graduation dessert table catering & vault top-up',
+                    $dateStr, $dateStr . ' 11:15:00'
+                ]);
+            }
+
             $currDate = $currDate->modify('+1 day');
         }
 
-        // Also insert 3 live active KDS orders for today (2026-11-14) so Kitchen Display & Floor Tables have live tickets
+        // Also insert 4 live active KDS orders across Ayiduase, Sawaba & Dechemso so Kitchen Display & Floor Tables have live tickets
         $liveOrders = [
             [
-                'num' => 'SD-LIVE01', 'branch' => 1, 'table' => 1, 'staff' => 4,
+                'num' => 'SD-LIVE01', 'branch' => 1, 'table' => 1, 'staff' => 3, // Yasmine (Ayiduase)
                 'cust' => 'Table AYI-T1 (KNUST Architecture Postgrads)', 'guests' => 3,
                 'type' => 'Dine-In', 'status' => 'Preparing', 'pay_status' => 'Unpaid', 'method' => 'MoMo',
-                'notes' => 'Extra Biscoff drizzle on 2 shakes, serve waffle warm',
+                'notes' => 'Top Sellers: Crazy Biscoff + Loaded Fries 150 & 180',
                 'items' => [
-                    [1, 3, 'Extra Biscoff Drizzle (+GHS 15)', 'Cooking'],
-                    [5, 2, '', 'Cooking'],
-                    [11, 2, 'Extra Spicy', 'Plated']
+                    [26, 2, 'Extra Biscoff Biscuit', 'Cooking'],   // Crazy Biscoff (150 GHc)
+                    [65, 2, 'Spicy Pepper Sauce', 'Cooking'],      // Loaded Fries (150 GHc)
+                    [66, 1, 'Extra Cheese (+GHS 20)', 'Plated']    // Loaded Fries (180 GHc)
                 ]
             ],
             [
-                'num' => 'SD-LIVE02', 'branch' => 1, 'table' => 6, 'staff' => 5,
+                'num' => 'SD-LIVE02', 'branch' => 1, 'table' => 6, 'staff' => 5, // Latif (Ayiduase)
                 'cust' => "VIP-1 (Hajia's Special Guests - Birthday)", 'guests' => 6,
                 'type' => 'Dine-In', 'status' => 'Ready', 'pay_status' => 'Paid', 'method' => 'Cash',
-                'notes' => 'Bring birthday sparkler with Grand Fiesta Platter',
+                'notes' => 'VIP Birthday Table — SD Special, Crazy Oreo & Matilda Cake',
                 'items' => [
-                    [15, 1, 'Birthday Sparkler', 'Plated'],
-                    [2, 4, '', 'Plated'],
-                    [10, 3, '', 'Plated']
+                    [28, 2, 'Extra Fresh Strawberries (+GHS 15)', 'Plated'], // SD Special (150 GHc)
+                    [22, 3, '', 'Plated'],                                   // Crazy Oreo (150 GHc)
+                    [36, 3, 'Add Vanilla Scoop (+GHS 15)', 'Plated']         // Matilda Cake (70 GHc)
                 ]
             ],
             [
-                'num' => 'SD-LIVE03', 'branch' => 2, 'table' => 9, 'staff' => 14,
+                'num' => 'SD-LIVE03', 'branch' => 2, 'table' => 9, 'staff' => 10, // Aisha (Sawaba)
                 'cust' => 'Table SAW-T1 (Sawaba Evening Family)', 'guests' => 4,
                 'type' => 'Dine-In', 'status' => 'Preparing', 'pay_status' => 'Paid', 'method' => 'MoMo',
-                'notes' => 'Less ice in Boba teas',
+                'notes' => 'Less ice in Mocktails, Chocoloco Crazy Shake & Loaded Fries 150',
                 'items' => [
-                    [7, 2, '', 'Cooking'],
-                    [13, 4, 'Less Ice', 'Plated']
+                    [24, 2, 'Extra Fudge Drizzle', 'Cooking'],     // Chocoloco (150 GHc)
+                    [65, 2, 'Spicy Pepper Sauce', 'Cooking'],      // Loaded Fries (150 GHc)
+                    [58, 3, 'Less Ice', 'Plated']                  // Taste The Music Mocktail (60 GHc)
+                ]
+            ],
+            [
+                'num' => 'SD-LIVE04', 'branch' => 3, 'table' => 13, 'staff' => 15, // Daniel (Dechemso)
+                'cust' => 'Table DEC-T1 (Dichemso Evening Lounge)', 'guests' => 4,
+                'type' => 'Dine-In', 'status' => 'Preparing', 'pay_status' => 'Paid', 'method' => 'Cash',
+                'notes' => 'Served by Daniel / Cashier Matilda — Red Velvet Madness & Loaded Fries 180',
+                'items' => [
+                    [23, 2, 'Extra Whipped Cream', 'Cooking'],     // Red Velvet Madness (150 GHc)
+                    [66, 2, 'Extra Chicken (+GHS 30)', 'Cooking'], // Loaded Fries (180 GHc)
+                    [69, 2, 'Extra Mozzarella (+GHS 15)', 'Plated'] // Cheesy Crepe (90 GHc)
                 ]
             ],
         ];
@@ -614,9 +901,9 @@ class Database {
                 $m = $menuCatalog[$li[0]];
                 $sub += $m['price'] * $li[1];
             }
-            $tax = round($sub * 0.06, 2);
-            $svc = round($sub * 0.025, 2);
-            $tot = round($sub + $tax + $svc, 2);
+            $tax = 0.00;
+            $svc = 0.00;
+            $tot = round($sub, 2);
 
             $insOrder->execute([
                 $lo['num'], $lo['branch'], $lo['table'], $lo['staff'],

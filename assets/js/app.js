@@ -21,6 +21,8 @@ const LiterosApp = (() => {
         orders: [],
         expenditures: [],
         expenditureSummary: {},
+        coffers: [],
+        coffersSummary: {},
         shifts: [],
 
         // POS Filters & Cart
@@ -53,6 +55,12 @@ const LiterosApp = (() => {
         expMethodFilter: 'all',
         expSearch: '',
 
+        // Finance & Coffers Filter
+        coffersPurposeFilter: 'all',
+        coffersYearFilter: 'all',
+        coffersChannelFilter: 'all',
+        coffersSearch: '',
+
         // Login Credentials Branch Filter
         loginBranchFilter: 'all',
 
@@ -67,7 +75,7 @@ const LiterosApp = (() => {
     const ROLE_PERMISSIONS = {
         Admin: {
             label: 'Executive Owner / Admin (Full Access)',
-            tabs: ['pos', 'kds', 'tables', 'sales', 'expenditures', 'reports', 'menu', 'staff', 'branches', 'company'],
+            tabs: ['pos', 'kds', 'tables', 'sales', 'expenditures', 'coffers', 'reports', 'menu', 'staff', 'branches', 'company'],
             defaultTab: 'pos',
             canSettlePayment: true,
             canApplyDiscount: true,
@@ -79,7 +87,7 @@ const LiterosApp = (() => {
         },
         Manager: {
             label: 'Branch Manager (Branch Operations, Expenses & BI)',
-            tabs: ['pos', 'kds', 'tables', 'sales', 'expenditures', 'reports', 'menu', 'staff'],
+            tabs: ['pos', 'kds', 'tables', 'sales', 'expenditures', 'coffers', 'reports', 'menu', 'staff'],
             defaultTab: 'pos',
             canSettlePayment: true,
             canApplyDiscount: true,
@@ -91,7 +99,7 @@ const LiterosApp = (() => {
         },
         Cashier: {
             label: 'POS Cashier (Register, MoMo/Cash Billing & Expenses)',
-            tabs: ['pos', 'tables', 'sales', 'expenditures'],
+            tabs: ['pos', 'tables', 'sales', 'expenditures', 'coffers'],
             defaultTab: 'pos',
             canSettlePayment: true,
             canApplyDiscount: true,
@@ -212,12 +220,12 @@ const LiterosApp = (() => {
         if (branch && branch.tax_override !== null && branch.tax_override !== '') {
             return Number(branch.tax_override);
         }
-        return Number(state.company?.tax_rate ?? 8.25);
+        return Number(state.company?.tax_rate ?? 0);
     }
 
     function getEffectiveServiceRate() {
         if (state.orderType !== 'Dine-In') return 0;
-        return Number(state.company?.service_charge_rate ?? 5.0);
+        return Number(state.company?.service_charge_rate ?? 0);
     }
 
     function minutesElapsed(createdAt) {
@@ -329,6 +337,8 @@ const LiterosApp = (() => {
             state.orders = data.orders || [];
             state.expenditures = data.expenditures || [];
             state.expenditureSummary = data.expenditure_summary || {};
+            state.coffers = data.coffers || [];
+            state.coffersSummary = data.coffers_summary || {};
             state.shifts = data.shifts || [];
 
             if (!state.activeStaff && state.staff.length > 0) {
@@ -351,6 +361,7 @@ const LiterosApp = (() => {
         renderTablesView();
         renderSalesView();
         renderExpendituresView();
+        renderCoffersView();
         renderReportsFilterOptions();
         renderMenuStudioView();
         renderStaffView();
@@ -423,10 +434,18 @@ const LiterosApp = (() => {
             addTableBtn.classList.toggle('hidden', !cfg.canAddTable);
         }
 
-        // 6. Menu Studio Add Dish button visibility (Chefs can 86/restock but not create/delete dishes)
+        // 6. Menu Studio Add Dish & Category buttons visibility (Chefs can 86/restock but not create/delete dishes/categories)
         const menuAddBtn = document.getElementById('btnMenuStudioAddDish');
         if (menuAddBtn) {
             menuAddBtn.classList.toggle('hidden', !cfg.canManageMenu);
+        }
+        const catAddBtn = document.getElementById('btnMenuStudioAddCategory');
+        if (catAddBtn) {
+            catAddBtn.classList.toggle('hidden', !cfg.canManageMenu);
+        }
+        const catCardAddBtn = document.getElementById('btnMenuCategoryCardAdd');
+        if (catCardAddBtn) {
+            catCardAddBtn.classList.toggle('hidden', !cfg.canManageMenu);
         }
     }
 
@@ -545,7 +564,7 @@ const LiterosApp = (() => {
                     <span>Chef Favorites</span>
                 </button>
             `;
-            state.categories.forEach(cat => {
+            state.categories.filter(cat => Number(cat.is_active) !== 0).forEach(cat => {
                 const count = state.menuItems.filter(m => Number(m.category_id) === Number(cat.id)).length;
                 const active = String(state.posCategoryId) === String(cat.id);
                 html += `
@@ -1542,7 +1561,273 @@ const LiterosApp = (() => {
     }
 
     // =========================================================================
-    // 5. MENU & RECIPE STUDIO
+    // 4B. FINANCE & COFFERS TREASURY VAULT
+    // =========================================================================
+    function renderCoffersView() {
+        const cfg = getCurrentRoleConfig();
+        const s = state.coffersSummary || {};
+
+        const branchSelect = document.getElementById('cofferFormBranchSelect');
+        if (branchSelect) {
+            branchSelect.innerHTML = state.branches.map(b =>
+                `<option value="${b.id}" ${Number(b.id) === Number(state.activeBranchId) ? 'selected' : ''}>${escapeHtml(b.name)}</option>`
+            ).join('');
+        }
+
+        // Update 6 KPI Cards
+        const setEl = (id, val) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = val;
+        };
+
+        setEl('cofKpiTotalRevenue', money(s.total_paid_revenue || 0));
+        setEl('cofKpiRevenueSub', `${(s.paid_orders_count || 0).toLocaleString()} paid orders (2024–2026)`);
+
+        setEl('cofKpiManualDeposits', `+${money(s.manual_deposits || 0)}`);
+        setEl('cofKpiManualDepositsSub', `${(s.deposits_count || 0).toLocaleString()} manual additions`);
+
+        setEl('cofKpiGrossInflow', money(s.gross_coffers_inflow || 0));
+
+        setEl('cofKpiGoodsWithdrawals', `-${money(s.goods_market_withdrawals || 0)}`);
+        setEl('cofKpiGoodsWithdrawalsSub', `${s.goods_market_count || 0} market runs • Avg ${money(s.avg_monthly_goods_withdrawal || 8950)}/mo`);
+
+        setEl('cofKpiNormalWithdrawals', `-${money(s.normal_withdrawals || 0)}`);
+        setEl('cofKpiNormalWithdrawalsSub', `${s.normal_withdrawals_count || 0} normal withdrawals`);
+
+        setEl('cofKpiNetBalance', money(s.net_coffers_balance || 0));
+        setEl('cofKpiNetBalanceSub', `After ${money(s.total_withdrawals || 0)} withdrawals & expenses`);
+
+        // Payment Channel Revenue Bar
+        setEl('cofRevCash', money(s.cash_revenue || 0));
+        setEl('cofRevMomo', money(s.momo_revenue || 0));
+        setEl('cofRevQr', money(s.qr_revenue || 0));
+        setEl('cofTotalWithdrawalsAll', `-${money(s.total_withdrawals || 0)}`);
+
+        const tbody = document.getElementById('coffersTableBody');
+        const tfoot = document.getElementById('coffersTableFoot');
+        if (!tbody) return;
+
+        const q = (state.coffersSearch || '').toLowerCase().trim();
+        const filtered = (state.coffers || []).filter(c => {
+            if (!cfg.canSwitchBranch && Number(c.branch_id) !== Number(state.activeBranchId)) {
+                return false;
+            }
+            if (state.coffersPurposeFilter === 'Deposit' && c.entry_type !== 'Deposit') return false;
+            if (state.coffersPurposeFilter === 'Withdrawal' && c.entry_type !== 'Withdrawal') return false;
+            if (state.coffersPurposeFilter === 'Withdrawal for Goods / Market' && c.purpose_type !== 'Withdrawal for Goods / Market') return false;
+            if (state.coffersPurposeFilter === 'Normal Withdrawal' && (c.entry_type !== 'Withdrawal' || c.purpose_type === 'Withdrawal for Goods / Market')) return false;
+
+            if (state.coffersYearFilter !== 'all' && !String(c.transaction_date || '').startsWith(state.coffersYearFilter)) {
+                return false;
+            }
+            if (state.coffersChannelFilter !== 'all' && c.payment_channel !== state.coffersChannelFilter) {
+                return false;
+            }
+            if (q) {
+                const hay = `${c.reference_no} ${c.purpose_type} ${c.description} ${c.recipient_or_source} ${c.branch_name} ${c.staff_name}`.toLowerCase();
+                if (!hay.includes(q)) return false;
+            }
+            return true;
+        });
+
+        if (filtered.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="10" class="py-12 text-center text-xs text-slate-500">No coffers entries match your current filter criteria.</td></tr>`;
+            if (tfoot) tfoot.innerHTML = '';
+            return;
+        }
+
+        let filteredDeposits = 0;
+        let filteredWithdrawals = 0;
+
+        tbody.innerHTML = filtered.map(c => {
+            const isDeposit = c.entry_type === 'Deposit';
+            const isMarketGoods = !isDeposit && c.purpose_type === 'Withdrawal for Goods / Market';
+
+            if (isDeposit) {
+                filteredDeposits += Number(c.amount);
+            } else {
+                filteredWithdrawals += Number(c.amount);
+            }
+
+            const badgeHtml = isDeposit
+                ? `<span class="px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 text-[10px] font-extrabold"><i class="fa-solid fa-circle-plus mr-1"></i>Manual Deposit (+)</span>`
+                : isMarketGoods
+                    ? `<span class="px-2.5 py-1 rounded-lg bg-amber-500/15 text-amber-300 border border-amber-500/30 text-[10px] font-extrabold"><i class="fa-solid fa-basket-shopping mr-1"></i>Withdrawal for Goods / Market</span>`
+                    : `<span class="px-2.5 py-1 rounded-lg bg-rose-500/15 text-rose-300 border border-rose-500/30 text-[10px] font-extrabold"><i class="fa-solid fa-money-bill-transfer mr-1"></i>Normal Withdrawal</span>`;
+
+            const channelBadge = {
+                Cash: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+                MoMo: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
+                'Bank Transfer': 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30',
+                'QR Pay': 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30'
+            }[c.payment_channel] || 'bg-slate-800 text-slate-300 border-white/10';
+
+            return `
+                <tr class="border-b border-white/5 hover:bg-white/[0.02] transition">
+                    <td class="py-3 px-4 font-mono-num text-xs font-bold text-amber-400">${escapeHtml(c.reference_no)}</td>
+                    <td class="py-3 px-4 font-mono-num text-xs text-slate-300">${escapeHtml(c.transaction_date)}</td>
+                    <td class="py-3 px-4 text-xs text-slate-300">${escapeHtml(c.branch_name || 'HQ')}</td>
+                    <td class="py-3 px-4">${badgeHtml}</td>
+                    <td class="py-3 px-4 text-xs text-white max-w-md">${escapeHtml(c.description)}</td>
+                    <td class="py-3 px-4 text-xs text-slate-300">${escapeHtml(c.recipient_or_source || '—')}</td>
+                    <td class="py-3 px-4">
+                        <span class="px-2 py-0.5 rounded text-[10px] font-bold border ${channelBadge}">
+                            ${escapeHtml(c.payment_channel)}
+                        </span>
+                    </td>
+                    <td class="py-3 px-4 text-xs text-slate-300">${escapeHtml(c.staff_name || 'Hajia Rabi Adam')}</td>
+                    <td class="py-3 px-4 text-right font-mono-num text-xs font-extrabold ${isDeposit ? 'text-emerald-400' : 'text-rose-400'}">
+                        ${isDeposit ? '+' : '-'}${money(c.amount)}
+                    </td>
+                    <td class="py-3 px-4 text-right whitespace-nowrap">
+                        <button onclick="LiterosApp.editCofferEntry(${c.id})"
+                                class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-amber-500 hover:text-slate-950 text-xs text-slate-200 mr-1 transition"
+                                title="Edit Entry">
+                            <i class="fa-solid fa-pen"></i>
+                        </button>
+                        ${cfg.canDeleteExpenditure ? `
+                            <button onclick="LiterosApp.deleteCofferEntry(${c.id})"
+                                    class="px-2.5 py-1 rounded-lg bg-rose-950/60 hover:bg-rose-600 text-xs text-rose-300 hover:text-white transition"
+                                    title="Delete Entry">
+                                <i class="fa-solid fa-trash"></i>
+                            </button>
+                        ` : ''}
+                    </td>
+                </tr>
+            `;
+        }).join('');
+
+        if (tfoot) {
+            const netFiltered = filteredDeposits - filteredWithdrawals;
+            tfoot.innerHTML = `
+                <tr>
+                    <td colspan="8" class="py-3.5 px-4 text-right uppercase tracking-wider text-amber-400">
+                        FILTERED LEDGER SUMMARY (${filtered.length} Entries — Deposits: +${money(filteredDeposits)} | Withdrawals: -${money(filteredWithdrawals)}):
+                    </td>
+                    <td class="py-3.5 px-4 text-right text-sm ${netFiltered >= 0 ? 'text-emerald-400' : 'text-rose-400'}">
+                        ${netFiltered >= 0 ? '+' : '-'}${money(Math.abs(netFiltered))}
+                    </td>
+                    <td></td>
+                </tr>
+            `;
+        }
+    }
+
+    function handleCofferEntryTypeChange(entryType) {
+        const purposeSelect = document.getElementById('cofferPurposeTypeSelect');
+        if (!purposeSelect) return;
+        if (entryType === 'Deposit') {
+            purposeSelect.innerHTML = `
+                <option value="Manual Coffer Deposit">Manual Coffer Deposit (Capital / Float / Catering Cash-In)</option>
+            `;
+        } else {
+            purposeSelect.innerHTML = `
+                <option value="Withdrawal for Goods / Market">Withdrawal for Goods / Market (Ingredients / Cooking Supplies)</option>
+                <option value="Normal Withdrawal">Normal Withdrawal (General / Owner / Petty / Bank)</option>
+            `;
+        }
+    }
+
+    function openCofferModal(entryType = 'Withdrawal', purposeType = 'Withdrawal for Goods / Market') {
+        const form = document.getElementById('cofferForm');
+        if (!form) return;
+        form.reset();
+        form.id.value = '';
+        form.entry_type.value = entryType;
+        handleCofferEntryTypeChange(entryType);
+        form.purpose_type.value = entryType === 'Deposit' ? 'Manual Coffer Deposit' : purposeType;
+        form.branch_id.value = state.activeBranchId;
+        form.payment_channel.value = 'Cash';
+        form.transaction_date.value = new Date().toISOString().slice(0, 10);
+
+        document.getElementById('cofferModalTitle').textContent = entryType === 'Deposit'
+            ? 'Add Money to Coffers (Manual Deposit)'
+            : (purposeType === 'Withdrawal for Goods / Market'
+                ? 'Withdraw from Coffers — For Goods / Market'
+                : 'Withdraw from Coffers — Normal Withdrawal');
+        document.getElementById('cofferModal').classList.remove('hidden');
+    }
+
+    function editCofferEntry(id) {
+        const item = (state.coffers || []).find(c => Number(c.id) === Number(id));
+        if (!item) return;
+        const form = document.getElementById('cofferForm');
+        if (!form) return;
+        form.id.value = item.id;
+        form.entry_type.value = item.entry_type;
+        handleCofferEntryTypeChange(item.entry_type);
+        form.purpose_type.value = item.purpose_type;
+        form.amount.value = item.amount;
+        form.payment_channel.value = item.payment_channel || 'Cash';
+        form.transaction_date.value = item.transaction_date;
+        form.branch_id.value = item.branch_id;
+        form.recipient_or_source.value = item.recipient_or_source || '';
+        form.description.value = item.description || '';
+
+        document.getElementById('cofferModalTitle').textContent = `Edit Coffer Entry: ${item.reference_no}`;
+        document.getElementById('cofferModal').classList.remove('hidden');
+    }
+
+    async function submitCofferForm(e) {
+        e.preventDefault();
+        const form = e.target;
+        const payload = {
+            id: form.id.value ? Number(form.id.value) : 0,
+            entry_type: form.entry_type.value,
+            purpose_type: form.purpose_type.value,
+            amount: parseFloat(form.amount.value || 0),
+            payment_channel: form.payment_channel.value,
+            transaction_date: form.transaction_date.value,
+            branch_id: Number(form.branch_id.value || state.activeBranchId),
+            recipient_or_source: form.recipient_or_source.value.trim(),
+            description: form.description.value.trim()
+        };
+        try {
+            const res = await api('save_coffer_entry', payload);
+            closeModal('cofferModal');
+            await loadBootstrap(state.activeBranchId);
+            toast(res.message);
+        } catch (err) {
+            toast(err.message, 'error');
+        }
+    }
+
+    async function deleteCofferEntry(id) {
+        if (!window.confirm('Delete this coffers ledger entry?')) return;
+        try {
+            const res = await api('delete_coffer_entry', { id });
+            await loadBootstrap(state.activeBranchId);
+            toast(res.message, 'info');
+        } catch (err) {
+            toast(err.message, 'error');
+        }
+    }
+
+    function exportCoffersCsv() {
+        const headers = ['Ref No', 'Date', 'Branch', 'Entry Type', 'Purpose Type', 'Description', 'Recipient / Source', 'Channel', 'Authorized By', 'Amount (GHS)'];
+        const rows = (state.coffers || []).map(c => [
+            c.reference_no,
+            c.transaction_date,
+            `"${(c.branch_name || '').replace(/"/g, '""')}"`,
+            c.entry_type,
+            `"${(c.purpose_type || '').replace(/"/g, '""')}"`,
+            `"${(c.description || '').replace(/"/g, '""')}"`,
+            `"${(c.recipient_or_source || '').replace(/"/g, '""')}"`,
+            c.payment_channel,
+            `"${(c.staff_name || '').replace(/"/g, '""')}"`,
+            c.entry_type === 'Deposit' ? c.amount : -Number(c.amount)
+        ]);
+        const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `shakes_and_dessert_coffers_ledger_${new Date().toISOString().slice(0, 10)}.csv`;
+        link.click();
+        toast('Finance & Coffers ledger exported to CSV');
+    }
+
+    // =========================================================================
+    // 5. MENU & RECIPE STUDIO + CATEGORIES CRUD
     // =========================================================================
     function renderMenuStudioView() {
         const cfg = getCurrentRoleConfig();
@@ -1551,14 +1836,120 @@ const LiterosApp = (() => {
             catSelect.innerHTML = state.categories.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
         }
 
+        const filterSelect = document.getElementById('menuStudioCategoryFilterSelect');
+        if (filterSelect) {
+            filterSelect.innerHTML = `<option value="all">All Categories (${state.menuItems.length} Dishes)</option>` +
+                state.categories.map(c => {
+                    const cnt = state.menuItems.filter(m => Number(m.category_id) === Number(c.id)).length;
+                    return `<option value="${c.id}" ${String(state.menuCategoryFilter) === String(c.id) ? 'selected' : ''}>${escapeHtml(c.name)} (${cnt})</option>`;
+                }).join('');
+        }
+
+        const catCountBadge = document.getElementById('menuCategoriesCountBadge');
+        if (catCountBadge) {
+            catCountBadge.textContent = `${state.categories.length} Categor${state.categories.length === 1 ? 'y' : 'ies'}`;
+        }
+
+        // Render Categories CRUD Grid
+        const catGrid = document.getElementById('menuCategoriesCrudGrid');
+        if (catGrid) {
+            if (state.categories.length === 0) {
+                catGrid.innerHTML = `<div class="col-span-full py-6 text-center text-xs text-slate-500">No categories found. Click "+ Create Category" to add one.</div>`;
+            } else {
+                catGrid.innerHTML = state.categories.map(cat => {
+                    const dishCount = state.menuItems.filter(m => Number(m.category_id) === Number(cat.id)).length;
+                    const isActive = Number(cat.is_active) !== 0;
+                    const isFiltered = String(state.menuCategoryFilter) === String(cat.id);
+                    const colorHex = cat.color || '#f59e0b';
+
+                    return `
+                        <div onclick="LiterosApp.setMenuStudioCategoryFilter('${isFiltered ? 'all' : cat.id}')"
+                             class="pos-card rounded-2xl p-4 flex items-center justify-between gap-3 cursor-pointer border ${
+                                 isFiltered ? 'border-amber-500 ring-1 ring-amber-500/40' : 'border-white/10'
+                             } ${!isActive ? 'opacity-65' : ''}">
+                            <div class="flex items-center gap-3 min-w-0">
+                                <div class="w-11 h-11 rounded-xl flex items-center justify-center text-base shrink-0 shadow-md"
+                                     style="background:${escapeHtml(colorHex)}22; border:1px solid ${escapeHtml(colorHex)}55; color:${escapeHtml(colorHex)}">
+                                    <i class="fa-solid ${escapeHtml(cat.icon || 'fa-utensils')}"></i>
+                                </div>
+                                <div class="min-w-0">
+                                    <div class="flex items-center gap-2">
+                                        <h4 class="font-bold text-xs text-white truncate">${escapeHtml(cat.name)}</h4>
+                                        ${isFiltered ? '<span class="px-1.5 py-0.5 rounded bg-amber-500 text-slate-950 text-[9px] font-extrabold">FILTERED</span>' : ''}
+                                    </div>
+                                    <div class="text-[11px] text-slate-400 font-mono-num flex items-center gap-2 mt-0.5">
+                                        <span>${dishCount} dish${dishCount === 1 ? '' : 'es'}</span>
+                                        <span>•</span>
+                                        <span>Sort #${cat.sort_order ?? 10}</span>
+                                        <span>•</span>
+                                        <span class="truncate">${escapeHtml(cat.slug || '')}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="flex items-center gap-1.5 shrink-0" onclick="event.stopPropagation()">
+                                ${cfg.canManageMenu ? `
+                                    <button type="button"
+                                            onclick="LiterosApp.toggleCategoryStatus(${cat.id})"
+                                            title="${isActive ? 'Active on POS (Click to Hide)' : 'Hidden on POS (Click to Activate)'}"
+                                            class="px-2 py-1 rounded-lg text-[10px] font-bold border transition ${
+                                                isActive
+                                                    ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                                                    : 'bg-slate-800 text-slate-400 border-white/10'
+                                            }">
+                                        ${isActive ? 'POS Active' : 'Hidden'}
+                                    </button>
+                                    <button type="button"
+                                            onclick="LiterosApp.editCategory(${cat.id})"
+                                            title="Edit Category"
+                                            class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-amber-500 hover:text-slate-950 text-xs text-slate-200 transition">
+                                        <i class="fa-solid fa-pen"></i>
+                                    </button>
+                                    <button type="button"
+                                            onclick="LiterosApp.deleteCategory(${cat.id})"
+                                            title="Delete Category"
+                                            class="px-2.5 py-1.5 rounded-lg bg-rose-950/60 hover:bg-rose-600 text-xs text-rose-300 hover:text-white transition">
+                                        <i class="fa-solid fa-trash"></i>
+                                    </button>
+                                ` : `
+                                    <span class="px-2 py-1 rounded-lg text-[10px] font-bold border ${
+                                        isActive
+                                            ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                                            : 'bg-slate-800 text-slate-400 border-white/10'
+                                    }">${isActive ? 'POS Active' : 'Hidden'}</span>
+                                `}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+        }
+
         const tbody = document.getElementById('menuStudioTableBody');
         if (!tbody) return;
 
-        tbody.innerHTML = state.menuItems.map(item => {
+        const q = (state.menuSearch || '').toLowerCase().trim();
+        const filteredDishes = state.menuItems.filter(item => {
+            if (state.menuCategoryFilter !== 'all' && Number(item.category_id) !== Number(state.menuCategoryFilter)) {
+                return false;
+            }
+            if (q && !item.name.toLowerCase().includes(q) && !item.sku.toLowerCase().includes(q) && !(item.category_name || '').toLowerCase().includes(q)) {
+                return false;
+            }
+            return true;
+        });
+
+        if (filteredDishes.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="8" class="py-10 text-center text-xs text-slate-500">No dishes match your category or search filter.</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = filteredDishes.map(item => {
             const margin = Number(item.price) > 0
                 ? Math.round(((Number(item.price) - Number(item.cost)) / Number(item.price)) * 100)
                 : 0;
             const lowStock = Number(item.stock_qty) <= Number(item.low_stock_threshold);
+            const catColor = item.category_color || '#f59e0b';
 
             return `
                 <tr class="border-b border-white/5 hover:bg-white/[0.02] transition">
@@ -1567,9 +1958,16 @@ const LiterosApp = (() => {
                             <span class="text-2xl">${escapeHtml(item.image_emoji)}</span>
                             <div>
                                 <div class="text-xs font-bold text-white">${escapeHtml(item.name)}</div>
-                                <div class="text-[11px] text-slate-400 font-mono-num">${escapeHtml(item.sku)} • ${escapeHtml(item.category_name || '')}</div>
+                                <div class="text-[11px] text-slate-400 font-mono-num">${escapeHtml(item.sku)} • ${escapeHtml(item.course_type || 'Main')}</div>
                             </div>
                         </div>
+                    </td>
+                    <td class="py-3 px-4">
+                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold"
+                              style="background:${escapeHtml(catColor)}1f; border:1px solid ${escapeHtml(catColor)}4d; color:${escapeHtml(catColor)}">
+                            <i class="fa-solid ${escapeHtml(item.category_icon || 'fa-utensils')} text-[10px]"></i>
+                            ${escapeHtml(item.category_name || 'Uncategorized')}
+                        </span>
                     </td>
                     <td class="py-3 px-4 font-mono-num text-xs font-bold text-amber-400">${money(item.price)}</td>
                     <td class="py-3 px-4 font-mono-num text-xs text-slate-300">${money(item.cost)}</td>
@@ -1613,6 +2011,113 @@ const LiterosApp = (() => {
                 </tr>
             `;
         }).join('');
+    }
+
+    function setMenuStudioCategoryFilter(catId) {
+        state.menuCategoryFilter = catId;
+        renderMenuStudioView();
+    }
+
+    function setMenuStudioSearch(q) {
+        state.menuSearch = q;
+        renderMenuStudioView();
+    }
+
+    function openNewCategoryModal() {
+        const form = document.getElementById('categoryForm');
+        if (!form) return;
+        form.reset();
+        form.id.value = '';
+        form.icon.value = 'fa-ice-cream';
+        form.color.value = '#f59e0b';
+        form.sort_order.value = (state.categories.length + 1) * 10;
+        form.is_active.checked = true;
+        const preview = document.getElementById('categoryModalPreviewIcon');
+        if (preview) preview.className = 'fa-solid fa-ice-cream';
+        document.getElementById('categoryModalTitle').textContent = 'Create Menu Category';
+        document.getElementById('categoryModal').classList.remove('hidden');
+    }
+
+    function editCategory(id) {
+        const cat = state.categories.find(c => Number(c.id) === Number(id));
+        if (!cat) return;
+        const form = document.getElementById('categoryForm');
+        if (!form) return;
+        form.id.value = cat.id;
+        form.name.value = cat.name || '';
+        form.slug.value = cat.slug || '';
+        form.icon.value = cat.icon || 'fa-utensils';
+        form.color.value = cat.color || '#f59e0b';
+        form.sort_order.value = cat.sort_order ?? 10;
+        form.is_active.checked = Number(cat.is_active) !== 0;
+
+        const preview = document.getElementById('categoryModalPreviewIcon');
+        if (preview) preview.className = `fa-solid ${cat.icon || 'fa-utensils'}`;
+        document.getElementById('categoryModalTitle').textContent = `Edit Category: ${cat.name}`;
+        document.getElementById('categoryModal').classList.remove('hidden');
+    }
+
+    function pickCategoryIcon(iconClass) {
+        const input = document.getElementById('categoryIconInput');
+        if (input) input.value = iconClass;
+        const preview = document.getElementById('categoryModalPreviewIcon');
+        if (preview) preview.className = `fa-solid ${iconClass}`;
+    }
+
+    async function submitCategoryForm(e) {
+        e.preventDefault();
+        const form = e.target;
+        const payload = {
+            id: form.id.value ? Number(form.id.value) : 0,
+            name: form.name.value.trim(),
+            slug: form.slug.value.trim(),
+            icon: form.icon.value.trim() || 'fa-utensils',
+            color: form.color.value || '#f59e0b',
+            sort_order: Number(form.sort_order.value || 10),
+            is_active: form.is_active.checked ? 1 : 0
+        };
+        try {
+            const res = await api('save_category', payload);
+            closeModal('categoryModal');
+            await loadBootstrap(state.activeBranchId);
+            toast(res.message);
+        } catch (err) {
+            toast(err.message, 'error');
+        }
+    }
+
+    async function toggleCategoryStatus(id) {
+        try {
+            const res = await api('toggle_category_status', { id });
+            await loadBootstrap(state.activeBranchId);
+            toast(res.message, 'info');
+        } catch (err) {
+            toast(err.message, 'error');
+        }
+    }
+
+    async function deleteCategory(id) {
+        const cat = state.categories.find(c => Number(c.id) === Number(id));
+        if (!cat) return;
+        const dishCount = state.menuItems.filter(m => Number(m.category_id) === Number(id)).length;
+        const msg = dishCount > 0
+            ? `Delete category "${cat.name}"? Its ${dishCount} dish(es) will be automatically reassigned to another category so no menu items are lost.`
+            : `Delete category "${cat.name}"?`;
+        if (!window.confirm(msg)) return;
+
+        try {
+            const res = await api('delete_category', { id });
+            if (String(state.menuCategoryFilter) === String(id)) {
+                state.menuCategoryFilter = 'all';
+            }
+            if (String(state.posCategoryId) === String(id)) {
+                state.posCategoryId = 'all';
+            }
+            await loadBootstrap(state.activeBranchId);
+            toast(res.message, 'info');
+        } catch (err) {
+            toast(err.message, 'error');
+        }
     }
 
     function openNewMenuModal() {
@@ -1905,7 +2410,7 @@ const LiterosApp = (() => {
                         <div class="flex items-center gap-2">
                             <span class="text-xs font-bold text-white group-hover:text-amber-300 transition">${escapeHtml(s.full_name)}</span>
                             <span class="px-2 py-0.5 rounded-md text-[10px] font-bold border ${roleBadges[s.role] || 'bg-slate-800 text-slate-300'}">
-                                ${escapeHtml(s.role === 'Waiter' ? 'Waitress' : s.role)}
+                                ${escapeHtml(s.role === 'Waiter' ? (String(s.full_name || '').includes('Waitress') ? 'Waitress' : 'Waiter') : s.role)}
                             </span>
                         </div>
                         <div class="text-[11px] text-slate-400 mt-0.5">
@@ -2838,7 +3343,7 @@ const LiterosApp = (() => {
                 document.getElementById('posSearchInput')?.focus();
             }
             if (e.key === 'Escape') {
-                ['modifierModal', 'checkoutModal', 'receiptModal', 'menuItemModal', 'staffModal', 'branchModal', 'tableModal', 'pinModal', 'expenditureModal']
+                ['modifierModal', 'checkoutModal', 'receiptModal', 'menuItemModal', 'categoryModal', 'staffModal', 'branchModal', 'tableModal', 'pinModal', 'expenditureModal', 'cofferModal']
                     .forEach(id => closeModal(id));
             }
         });
@@ -2880,12 +3385,30 @@ const LiterosApp = (() => {
         setExpenditureSearch: (q) => { state.expSearch = q; renderExpendituresView(); },
         setExpenditureCategoryFilter: (c) => { state.expCategoryFilter = c; renderExpendituresView(); },
         setExpenditureMethodFilter: (m) => { state.expMethodFilter = m; renderExpendituresView(); },
+        openCofferModal,
+        handleCofferEntryTypeChange,
+        editCofferEntry,
+        submitCofferForm,
+        deleteCofferEntry,
+        exportCoffersCsv,
+        setCoffersPurposeFilter: (p) => { state.coffersPurposeFilter = p; renderCoffersView(); },
+        setCoffersYearFilter: (y) => { state.coffersYearFilter = y; renderCoffersView(); },
+        setCoffersChannelFilter: (ch) => { state.coffersChannelFilter = ch; renderCoffersView(); },
+        setCoffersSearch: (q) => { state.coffersSearch = q; renderCoffersView(); },
         openNewMenuModal,
         editMenuItem,
         submitMenuItem,
         toggleAvailability,
         restockItem,
         deleteMenuItem,
+        setMenuStudioCategoryFilter,
+        setMenuStudioSearch,
+        openNewCategoryModal,
+        editCategory,
+        pickCategoryIcon,
+        submitCategoryForm,
+        toggleCategoryStatus,
+        deleteCategory,
         setActiveOperator,
         openNewStaffModal,
         editStaffMember,

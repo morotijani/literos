@@ -75,7 +75,12 @@ try {
                 $branchId = (int)$branches[0]['id'];
             }
 
-            $categories = $pdo->query("SELECT * FROM categories ORDER BY sort_order ASC, id ASC")->fetchAll();
+            $categories = $pdo->query("
+                SELECT c.*,
+                    (SELECT COUNT(*) FROM menu_items m WHERE m.category_id = c.id) AS items_count
+                FROM categories c
+                ORDER BY c.sort_order ASC, c.id ASC
+            ")->fetchAll();
             $menuItems = $pdo->query("
                 SELECT m.*, c.name AS category_name, c.color AS category_color, c.icon AS category_icon
                 FROM menu_items m
@@ -191,6 +196,70 @@ try {
                 'ytd_2026_amount' => 0,
             ];
 
+            // Finance & Coffers Ledger (all entries across company + branch metadata)
+            $coffers = $pdo->query("
+                SELECT c.*, b.name AS branch_name, b.code AS branch_code,
+                       s.full_name AS staff_name, s.role AS staff_role
+                FROM coffers_ledger c
+                LEFT JOIN branches b ON b.id = c.branch_id
+                LEFT JOIN staff s ON s.id = c.staff_id
+                ORDER BY c.transaction_date DESC, c.id DESC
+            ")->fetchAll();
+
+            // Company-wide & Active-Branch Revenue + Coffers Summary
+            $revRow = $pdo->query("
+                SELECT
+                    COUNT(*) AS paid_orders_count,
+                    COALESCE(SUM(total_amount), 0) AS total_paid_revenue,
+                    COALESCE(SUM(CASE WHEN payment_method = 'Cash' THEN total_amount ELSE 0 END), 0) AS cash_revenue,
+                    COALESCE(SUM(CASE WHEN payment_method = 'MoMo' THEN total_amount ELSE 0 END), 0) AS momo_revenue,
+                    COALESCE(SUM(CASE WHEN payment_method = 'QR Pay' THEN total_amount ELSE 0 END), 0) AS qr_revenue,
+                    COALESCE(SUM(CASE WHEN created_at >= '2026-01-01' THEN total_amount ELSE 0 END), 0) AS revenue_2026
+                FROM orders
+                WHERE status != 'Cancelled' AND payment_status = 'Paid'
+            ")->fetch() ?: [];
+
+            $cofAgg = $pdo->query("
+                SELECT
+                    COALESCE(SUM(CASE WHEN entry_type = 'Deposit' THEN amount ELSE 0 END), 0) AS manual_deposits,
+                    COUNT(CASE WHEN entry_type = 'Deposit' THEN 1 END) AS deposits_count,
+                    COALESCE(SUM(CASE WHEN entry_type = 'Withdrawal' THEN amount ELSE 0 END), 0) AS total_withdrawals,
+                    COUNT(CASE WHEN entry_type = 'Withdrawal' THEN 1 END) AS withdrawals_count,
+                    COALESCE(SUM(CASE WHEN entry_type = 'Withdrawal' AND purpose_type = 'Withdrawal for Goods / Market' THEN amount ELSE 0 END), 0) AS goods_market_withdrawals,
+                    COUNT(CASE WHEN entry_type = 'Withdrawal' AND purpose_type = 'Withdrawal for Goods / Market' THEN 1 END) AS goods_market_count,
+                    COALESCE(SUM(CASE WHEN entry_type = 'Withdrawal' AND purpose_type != 'Withdrawal for Goods / Market' THEN amount ELSE 0 END), 0) AS normal_withdrawals,
+                    COUNT(CASE WHEN entry_type = 'Withdrawal' AND purpose_type != 'Withdrawal for Goods / Market' THEN 1 END) AS normal_withdrawals_count
+                FROM coffers_ledger
+            ")->fetch() ?: [];
+
+            $totalAllExpenditures = (float)$pdo->query("SELECT COALESCE(SUM(amount), 0) FROM expenditures")->fetchColumn();
+            $totalPaidRev = (float)($revRow['total_paid_revenue'] ?? 0);
+            $manualDeps = (float)($cofAgg['manual_deposits'] ?? 0);
+            $totWithdrawals = (float)($cofAgg['total_withdrawals'] ?? 0);
+            $goodsWithdrawals = (float)($cofAgg['goods_market_withdrawals'] ?? 0);
+            $normalWithdrawals = (float)($cofAgg['normal_withdrawals'] ?? 0);
+
+            $coffersSummary = [
+                'paid_orders_count'        => (int)($revRow['paid_orders_count'] ?? 0),
+                'total_paid_revenue'       => round($totalPaidRev, 2),
+                'cash_revenue'             => round((float)($revRow['cash_revenue'] ?? 0), 2),
+                'momo_revenue'             => round((float)($revRow['momo_revenue'] ?? 0), 2),
+                'qr_revenue'               => round((float)($revRow['qr_revenue'] ?? 0), 2),
+                'revenue_2026'             => round((float)($revRow['revenue_2026'] ?? 0), 2),
+                'manual_deposits'          => round($manualDeps, 2),
+                'deposits_count'           => (int)($cofAgg['deposits_count'] ?? 0),
+                'total_withdrawals'        => round($totWithdrawals, 2),
+                'withdrawals_count'        => (int)($cofAgg['withdrawals_count'] ?? 0),
+                'goods_market_withdrawals' => round($goodsWithdrawals, 2),
+                'goods_market_count'       => (int)($cofAgg['goods_market_count'] ?? 0),
+                'avg_monthly_goods_withdrawal' => round($goodsWithdrawals / 35.0, 2),
+                'normal_withdrawals'       => round($normalWithdrawals, 2),
+                'normal_withdrawals_count' => (int)($cofAgg['normal_withdrawals_count'] ?? 0),
+                'total_expenditures'       => round($totalAllExpenditures, 2),
+                'gross_coffers_inflow'     => round($totalPaidRev + $manualDeps, 2),
+                'net_coffers_balance'      => round(($totalPaidRev + $manualDeps) - $totWithdrawals - $totalAllExpenditures, 2),
+            ];
+
             // Shifts
             $shiftsStmt = $pdo->prepare("
                 SELECT sh.*, s.full_name AS staff_name, b.name AS branch_name
@@ -229,6 +298,8 @@ try {
                 'orders' => $orders,
                 'expenditures' => $expenditures,
                 'expenditure_summary' => $expenditureSummary,
+                'coffers' => $coffers,
+                'coffers_summary' => $coffersSummary,
                 'shifts' => $shifts,
             ]);
             break;
@@ -274,9 +345,9 @@ try {
 
             $taxRate = ($branch && $branch['tax_override'] !== null && $branch['tax_override'] !== '')
                 ? (float)$branch['tax_override']
-                : (float)($company['tax_rate'] ?? 8.25);
+                : (float)($company['tax_rate'] ?? 0.00);
             $serviceRate = ($orderType === 'Dine-In')
-                ? (float)($company['service_charge_rate'] ?? 5.00)
+                ? (float)($company['service_charge_rate'] ?? 0.00)
                 : 0.00;
 
             $subtotal = 0.0;
@@ -506,6 +577,75 @@ try {
         // =====================================================================
         // 5. MENU & CATEGORY STUDIO
         // =====================================================================
+        case 'save_coffer_entry':
+            $actor = requireRoles($pdo, $payload, ['Admin', 'Manager', 'Cashier']);
+            $id = (int)($payload['id'] ?? 0);
+            $branchId = (int)($payload['branch_id'] ?? $actor['branch_id'] ?? 1);
+            $staffId = (int)$actor['id'];
+            $entryType = in_array($payload['entry_type'] ?? '', ['Deposit', 'Withdrawal'], true)
+                ? $payload['entry_type']
+                : 'Withdrawal';
+            $purposeType = trim((string)($payload['purpose_type'] ?? ''));
+            if ($entryType === 'Deposit') {
+                $purposeType = $purposeType !== '' ? $purposeType : 'Manual Coffer Deposit';
+            } else {
+                if (!in_array($purposeType, ['Withdrawal for Goods / Market', 'Normal Withdrawal'], true)) {
+                    $purposeType = 'Withdrawal for Goods / Market';
+                }
+            }
+            $channel = in_array($payload['payment_channel'] ?? '', ['Cash', 'MoMo', 'Bank Transfer', 'QR Pay'], true)
+                ? $payload['payment_channel']
+                : 'Cash';
+            $amount = round(max(0, (float)($payload['amount'] ?? 0)), 2);
+            $recipientOrSource = trim((string)($payload['recipient_or_source'] ?? ''));
+            $description = trim((string)($payload['description'] ?? ''));
+            $txDate = trim((string)($payload['transaction_date'] ?? date('Y-m-d'))) ?: date('Y-m-d');
+
+            if ($amount <= 0 || $description === '') {
+                respond(['error' => 'Please enter a valid positive amount and description.'], 422);
+            }
+
+            if ($id > 0) {
+                $stmt = $pdo->prepare("
+                    UPDATE coffers_ledger
+                    SET branch_id = ?, entry_type = ?, purpose_type = ?, payment_channel = ?,
+                        amount = ?, recipient_or_source = ?, description = ?, transaction_date = ?
+                    WHERE id = ?
+                ");
+                $stmt->execute([
+                    $branchId, $entryType, $purposeType, $channel,
+                    $amount, $recipientOrSource, $description, $txDate, $id
+                ]);
+                respond(['message' => "Coffers entry updated ({$entryType}: GHS {$amount})"]);
+            } else {
+                $refNo = 'COF-' . strtoupper(substr(md5(uniqid((string)mt_rand(), true)), 0, 5));
+                $stmt = $pdo->prepare("
+                    INSERT INTO coffers_ledger (
+                        reference_no, branch_id, staff_id, entry_type, purpose_type,
+                        payment_channel, amount, recipient_or_source, description, transaction_date, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ");
+                $stmt->execute([
+                    $refNo, $branchId, $staffId, $entryType, $purposeType,
+                    $channel, $amount, $recipientOrSource, $description, $txDate, date('Y-m-d H:i:s')
+                ]);
+                $label = $entryType === 'Deposit'
+                    ? "Added GHS {$amount} to Coffers ({$refNo})"
+                    : "Withdrew GHS {$amount} from Coffers — {$purposeType} ({$refNo})";
+                respond(['message' => $label]);
+            }
+            break;
+
+        case 'delete_coffer_entry':
+            requireRoles($pdo, $payload, ['Admin', 'Manager']);
+            $id = (int)($payload['id'] ?? 0);
+            if ($id <= 0) {
+                respond(['error' => 'Invalid coffers entry ID.'], 422);
+            }
+            $pdo->prepare("DELETE FROM coffers_ledger WHERE id = ?")->execute([$id]);
+            respond(['message' => 'Coffers ledger entry deleted']);
+            break;
+
         case 'save_menu_item':
             requireRoles($pdo, $payload, ['Admin', 'Manager']);
             $id = (int)($payload['id'] ?? 0);
@@ -594,16 +734,98 @@ try {
 
         case 'save_category':
             requireRoles($pdo, $payload, ['Admin', 'Manager']);
+            $id = (int)($payload['id'] ?? 0);
             $name = trim((string)($payload['name'] ?? ''));
-            $icon = trim((string)($payload['icon'] ?? 'fa-utensils'));
-            $color = trim((string)($payload['color'] ?? '#f59e0b'));
+            $slugInput = trim((string)($payload['slug'] ?? ''));
+            $icon = trim((string)($payload['icon'] ?? 'fa-utensils')) ?: 'fa-utensils';
+            $color = trim((string)($payload['color'] ?? '#f59e0b')) ?: '#f59e0b';
+            $sortOrder = (int)($payload['sort_order'] ?? 10);
+            $isActive = isset($payload['is_active']) ? ((int)$payload['is_active'] ? 1 : 0) : 1;
+
             if ($name === '') {
-                respond(['error' => 'Category name is required'], 422);
+                respond(['error' => 'Category name is required.'], 422);
             }
-            $slug = strtolower(preg_replace('/[^a-zA-Z0-9]+/', '-', $name));
-            $stmt = $pdo->prepare("INSERT INTO categories (name, slug, icon, color, sort_order) VALUES (?, ?, ?, ?, 10)");
-            $stmt->execute([$name, $slug, $icon, $color]);
-            respond(['message' => "Category '{$name}' created"]);
+            $slug = $slugInput !== ''
+                ? strtolower(preg_replace('/[^a-zA-Z0-9-]+/', '-', $slugInput))
+                : strtolower(preg_replace('/[^a-zA-Z0-9]+/', '-', $name));
+            $slug = trim($slug, '-') ?: 'category-' . rand(100, 999);
+
+            if ($id > 0) {
+                $stmt = $pdo->prepare("
+                    UPDATE categories
+                    SET name = ?, slug = ?, icon = ?, color = ?, sort_order = ?, is_active = ?
+                    WHERE id = ?
+                ");
+                $stmt->execute([$name, $slug, $icon, $color, $sortOrder, $isActive, $id]);
+                respond(['message' => "Category '{$name}' updated"]);
+            } else {
+                $stmt = $pdo->prepare("
+                    INSERT INTO categories (name, slug, icon, color, sort_order, is_active)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                ");
+                $stmt->execute([$name, $slug, $icon, $color, $sortOrder, $isActive]);
+                respond(['message' => "Category '{$name}' created", 'id' => (int)$pdo->lastInsertId()]);
+            }
+            break;
+
+        case 'toggle_category_status':
+            requireRoles($pdo, $payload, ['Admin', 'Manager']);
+            $id = (int)($payload['id'] ?? 0);
+            if ($id <= 0) {
+                respond(['error' => 'Invalid category ID.'], 422);
+            }
+            $pdo->prepare("UPDATE categories SET is_active = CASE WHEN is_active = 1 THEN 0 ELSE 1 END WHERE id = ?")
+                ->execute([$id]);
+            respond(['message' => 'Category visibility status updated']);
+            break;
+
+        case 'delete_category':
+            requireRoles($pdo, $payload, ['Admin', 'Manager']);
+            $id = (int)($payload['id'] ?? 0);
+            if ($id <= 0) {
+                respond(['error' => 'Invalid category ID.'], 422);
+            }
+
+            $catStmt = $pdo->prepare("SELECT * FROM categories WHERE id = ?");
+            $catStmt->execute([$id]);
+            $cat = $catStmt->fetch();
+            if (!$cat) {
+                respond(['error' => 'Category not found.'], 404);
+            }
+
+            $totalCats = (int)$pdo->query("SELECT COUNT(*) FROM categories")->fetchColumn();
+            if ($totalCats <= 1) {
+                respond(['error' => 'Cannot delete the last remaining menu category.'], 422);
+            }
+
+            $dishCountStmt = $pdo->prepare("SELECT COUNT(*) FROM menu_items WHERE category_id = ?");
+            $dishCountStmt->execute([$id]);
+            $dishCount = (int)$dishCountStmt->fetchColumn();
+
+            $reassignedMsg = '';
+            if ($dishCount > 0) {
+                $reassignTo = (int)($payload['reassign_category_id'] ?? 0);
+                if ($reassignTo <= 0 || $reassignTo === $id) {
+                    $fallbackStmt = $pdo->prepare("SELECT id, name FROM categories WHERE id != ? ORDER BY sort_order ASC, id ASC LIMIT 1");
+                    $fallbackStmt->execute([$id]);
+                    $fallbackCat = $fallbackStmt->fetch();
+                } else {
+                    $fallbackStmt = $pdo->prepare("SELECT id, name FROM categories WHERE id = ?");
+                    $fallbackStmt->execute([$reassignTo]);
+                    $fallbackCat = $fallbackStmt->fetch();
+                }
+
+                if (!$fallbackCat) {
+                    respond(['error' => 'Unable to find a target category to reassign dishes.'], 422);
+                }
+
+                $pdo->prepare("UPDATE menu_items SET category_id = ? WHERE category_id = ?")
+                    ->execute([(int)$fallbackCat['id'], $id]);
+                $reassignedMsg = " ({$dishCount} dish(es) moved to '{$fallbackCat['name']}')";
+            }
+
+            $pdo->prepare("DELETE FROM categories WHERE id = ?")->execute([$id]);
+            respond(['message' => "Category '{$cat['name']}' deleted{$reassignedMsg}"]);
             break;
 
         // =====================================================================
