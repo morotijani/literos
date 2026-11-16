@@ -10,7 +10,7 @@ $literosAppEnv = getAppEnv();
 $literosIsProd = isProductionMode();
 ?>
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en" class="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -48,9 +48,9 @@ $literosIsProd = isProductionMode();
         window.LITEROS_IS_PRODUCTION = <?= $literosIsProd ? 'true' : 'false' ?>;
         (function () {
             try {
-                const savedTheme = localStorage.getItem('literos_theme') || 'dark';
+                const savedTheme = localStorage.getItem('literos_theme') || 'light';
                 document.documentElement.classList.remove('dark', 'light');
-                document.documentElement.classList.add(savedTheme === 'light' ? 'light' : 'dark');
+                document.documentElement.classList.add(savedTheme === 'dark' ? 'dark' : 'light');
             } catch (_) {}
         })();
     </script>
@@ -61,6 +61,9 @@ $literosIsProd = isProductionMode();
     <!-- jsPDF & AutoTable for Direct PDF Financial Report Export -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+
+    <!-- SheetJS for Multi-Sheet Excel (.xlsx) Export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body class="min-h-screen flex flex-col bg-[#090b10] text-slate-100 select-none">
 
@@ -121,8 +124,8 @@ $literosIsProd = isProductionMode();
                     onclick="LiterosApp.toggleTheme()"
                     title="Switch between Dark Mode and Light Mode"
                     class="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-white/10 text-xs font-bold text-slate-200 transition">
-                <i id="themeToggleIcon" class="fa-solid fa-sun text-amber-400"></i>
-                <span id="themeToggleLabel" class="hidden xl:inline">Light Mode</span>
+                <i id="themeToggleIcon" class="fa-solid fa-moon text-indigo-400"></i>
+                <span id="themeToggleLabel" class="hidden xl:inline">Dark Mode</span>
             </button>
 
             <button onclick="LiterosApp.logoutSession()"
@@ -890,11 +893,15 @@ $literosIsProd = isProductionMode();
                                 class="px-2.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-white/10 text-xs font-semibold text-slate-300 hover:text-amber-300 transition">
                             All Time (2024–2026)
                         </button>
-                        <button onclick="LiterosApp.exportFullReportCsv()"
+                        <button id="btnExportReportExcel" onclick="LiterosApp.openReportExportModal('excel')"
                                 class="px-3.5 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500 text-emerald-300 hover:text-slate-950 border border-emerald-500/40 text-xs font-bold flex items-center gap-1.5 transition">
+                            <i class="fa-solid fa-file-excel"></i>Export Excel
+                        </button>
+                        <button id="btnExportReportCsv" onclick="LiterosApp.openReportExportModal('csv')"
+                                class="px-3.5 py-1.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500 text-cyan-300 hover:text-slate-950 border border-cyan-500/40 text-xs font-bold flex items-center gap-1.5 transition">
                             <i class="fa-solid fa-file-csv"></i>Export CSV
                         </button>
-                        <button id="btnExportReportPdf" onclick="LiterosApp.exportFullReportPdf()"
+                        <button id="btnExportReportPdf" onclick="LiterosApp.openReportExportModal('pdf')"
                                 class="px-3.5 py-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-500 text-rose-300 hover:text-white border border-rose-500/40 text-xs font-bold flex items-center gap-1.5 transition">
                             <i class="fa-solid fa-file-pdf"></i>Export PDF
                         </button>
@@ -2099,6 +2106,127 @@ $literosIsProd = isProductionMode();
         </form>
     </div>
 
+    <!-- 7C. Customizable Report Export Modal (Select Format, Tables & Columns) -->
+    <div id="reportExportModal" class="hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+        <form id="reportExportForm" onsubmit="LiterosApp.submitReportExport(event)"
+              class="glass-panel rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 border border-white/15 space-y-4">
+            <div class="flex items-center justify-between border-b border-white/10 pb-3">
+                <div>
+                    <h3 class="font-bold text-base text-white">
+                        <i class="fa-solid fa-sliders text-amber-400 mr-1.5"></i>Customize Report Export
+                    </h3>
+                    <p class="text-[11px] text-slate-400 mt-0.5">Choose export format and select only the tables you want to include</p>
+                </div>
+                <button type="button" onclick="LiterosApp.closeModal('reportExportModal')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <!-- Export Format Selector -->
+            <div>
+                <label class="block text-xs font-semibold text-slate-300 mb-1.5">Export Format</label>
+                <div class="grid grid-cols-3 gap-2">
+                    <button type="button" data-fmt="excel" onclick="LiterosApp.setReportExportFormat('excel')"
+                            class="rep-exp-fmt-btn py-2 px-3 rounded-xl border border-white/10 bg-slate-900 text-xs font-bold text-slate-300 flex items-center justify-center gap-1.5 transition">
+                        <i class="fa-solid fa-file-excel text-emerald-400"></i>Excel (.xlsx)
+                    </button>
+                    <button type="button" data-fmt="pdf" onclick="LiterosApp.setReportExportFormat('pdf')"
+                            class="rep-exp-fmt-btn py-2 px-3 rounded-xl border border-white/10 bg-slate-900 text-xs font-bold text-slate-300 flex items-center justify-center gap-1.5 transition">
+                        <i class="fa-solid fa-file-pdf text-rose-400"></i>PDF (.pdf)
+                    </button>
+                    <button type="button" data-fmt="csv" onclick="LiterosApp.setReportExportFormat('csv')"
+                            class="rep-exp-fmt-btn py-2 px-3 rounded-xl border border-white/10 bg-slate-900 text-xs font-bold text-slate-300 flex items-center justify-center gap-1.5 transition">
+                        <i class="fa-solid fa-file-csv text-cyan-400"></i>CSV (.csv)
+                    </button>
+                </div>
+            </div>
+
+            <!-- Select Tables / Sections -->
+            <div class="space-y-2">
+                <div class="flex items-center justify-between">
+                    <label class="text-xs font-semibold text-slate-300">Select Tables to Include</label>
+                    <div class="flex items-center gap-2 text-[11px]">
+                        <button type="button" onclick="LiterosApp.toggleAllExportTables(true)" class="text-amber-400 hover:underline font-semibold">Select All</button>
+                        <span class="text-slate-600">|</span>
+                        <button type="button" onclick="LiterosApp.toggleAllExportTables(false)" class="text-slate-400 hover:text-white hover:underline">Clear All</button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <label class="flex items-start gap-2.5 p-2.5 rounded-xl bg-slate-900/80 border border-white/10 cursor-pointer hover:border-amber-500/40 transition">
+                        <input type="checkbox" name="exportTables" value="kpis" checked class="mt-0.5 accent-amber-500">
+                        <div>
+                            <div class="text-xs font-bold text-white">Executive KPI Summary</div>
+                            <div class="text-[10px] text-slate-400">Revenue, COGS, Gross & Net Profit</div>
+                        </div>
+                    </label>
+                    <label class="flex items-start gap-2.5 p-2.5 rounded-xl bg-slate-900/80 border border-white/10 cursor-pointer hover:border-amber-500/40 transition">
+                        <input type="checkbox" name="exportTables" value="branches" checked class="mt-0.5 accent-amber-500">
+                        <div>
+                            <div class="text-xs font-bold text-white">Branch Performance</div>
+                            <div class="text-[10px] text-slate-400">Ayiduase, Sawaba & Dechemso totals</div>
+                        </div>
+                    </label>
+                    <label class="flex items-start gap-2.5 p-2.5 rounded-xl bg-slate-900/80 border border-white/10 cursor-pointer hover:border-amber-500/40 transition">
+                        <input type="checkbox" name="exportTables" value="payments" checked class="mt-0.5 accent-amber-500">
+                        <div>
+                            <div class="text-xs font-bold text-white">Payment & Channels</div>
+                            <div class="text-[10px] text-slate-400">Cash / MoMo / QR Pay & Dine-In mix</div>
+                        </div>
+                    </label>
+                    <label class="flex items-start gap-2.5 p-2.5 rounded-xl bg-slate-900/80 border border-white/10 cursor-pointer hover:border-amber-500/40 transition">
+                        <input type="checkbox" name="exportTables" value="items" checked class="mt-0.5 accent-amber-500">
+                        <div>
+                            <div class="text-xs font-bold text-white">Menu Items Breakdown</div>
+                            <div class="text-[10px] text-slate-400">Units sold, revenue & profit by dish</div>
+                        </div>
+                    </label>
+                    <label class="flex items-start gap-2.5 p-2.5 rounded-xl bg-slate-900/80 border border-white/10 cursor-pointer hover:border-amber-500/40 transition">
+                        <input type="checkbox" name="exportTables" value="staff" checked class="mt-0.5 accent-amber-500">
+                        <div>
+                            <div class="text-xs font-bold text-white">Sales Personnel Audit</div>
+                            <div class="text-[10px] text-slate-400">Staff orders, gross sales & commission</div>
+                        </div>
+                    </label>
+                    <label class="flex items-start gap-2.5 p-2.5 rounded-xl bg-slate-900/80 border border-white/10 cursor-pointer hover:border-amber-500/40 transition">
+                        <input type="checkbox" name="exportTables" value="expenditures" checked class="mt-0.5 accent-amber-500">
+                        <div>
+                            <div class="text-xs font-bold text-white">Operating Expenditures</div>
+                            <div class="text-[10px] text-slate-400">Expense category totals & vouchers</div>
+                        </div>
+                    </label>
+                    <label class="sm:col-span-2 flex items-start gap-2.5 p-2.5 rounded-xl bg-slate-900/80 border border-white/10 cursor-pointer hover:border-amber-500/40 transition">
+                        <input type="checkbox" id="expTableTransactionsChk" name="exportTables" value="transactions" checked onchange="LiterosApp.toggleExportLedgerColumnOptions()" class="mt-0.5 accent-amber-500">
+                        <div>
+                            <div class="text-xs font-bold text-white">Detailed Sales Orders & Transactions Ledger</div>
+                            <div class="text-[10px] text-slate-400">Order-by-order breakdown matching your active filters</div>
+                        </div>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Optional Ledger Columns (Customers / Personnel) -->
+            <div id="exportLedgerColumnOptions" class="p-3 rounded-xl bg-slate-950/60 border border-white/10 space-y-2">
+                <div class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Transactions Ledger Optional Columns</div>
+                <div class="flex flex-wrap items-center gap-4 text-xs text-slate-200">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" id="expColCustomer" checked class="accent-amber-500">
+                        <span>Include Customer Name</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" id="expColPersonnel" checked class="accent-amber-500">
+                        <span>Include Personnel</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-2 pt-2 border-t border-white/10">
+                <button type="button" onclick="LiterosApp.closeModal('reportExportModal')" class="px-4 py-2 rounded-xl bg-slate-800 text-xs text-slate-300">Cancel</button>
+                <button id="btnRunReportExport" type="submit" class="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs flex items-center gap-1.5 transition">
+                    <i class="fa-solid fa-download"></i>Export Selected Tables
+                </button>
+            </div>
+        </form>
+    </div>
+
     <!-- 8. Quick Operator PIN Switcher Modal -->
     <div id="pinModal" class="hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
         <form onsubmit="LiterosApp.submitPinSwitch(event)"
@@ -2147,8 +2275,8 @@ $literosIsProd = isProductionMode();
                                 onclick="LiterosApp.toggleTheme()"
                                 title="Switch between Dark Mode and Light Mode"
                                 class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-white/10 text-[11px] font-bold text-slate-200 transition shrink-0">
-                            <i id="loginThemeToggleIcon" class="fa-solid fa-sun text-amber-400"></i>
-                            <span id="loginThemeToggleLabel">Light</span>
+                            <i id="loginThemeToggleIcon" class="fa-solid fa-moon text-indigo-400"></i>
+                            <span id="loginThemeToggleLabel">Dark</span>
                         </button>
                     </div>
 

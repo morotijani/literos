@@ -69,7 +69,8 @@ class Database {
                     $otherExpCount = (int)$pdo->query("SELECT COUNT(*) FROM expenditures WHERE category = 'Other'")->fetchColumn();
                     $walkInCount = (int)$pdo->query("SELECT COUNT(*) FROM orders WHERE customer_name = 'Walk-in Customer'")->fetchColumn();
                     $smallOrderCount = (int)$pdo->query("SELECT COUNT(*) FROM orders WHERE total_amount >= 300 AND total_amount <= 900")->fetchColumn();
-                    if ($compName !== 'Shakes and Dessert' || $orderCount < 18500 || $catCount < 11 || $coffersCount < 20 || $taxTipSum > 0 || $oldSeed > 0 || $decBreakMax > 3500 || $sawClosureCount > 0 || $recentSlumpAvg > 42000 || $otherExpCount === 0 || $walkInCount < 4000 || $smallOrderCount < 2500) {
+                    $decApr2024Avg = (float)$pdo->query("SELECT COALESCE(SUM(total_amount), 0) / 30.0 FROM orders WHERE branch_id = 3 AND created_at >= '2024-04-01 00:00:00' AND created_at <= '2024-04-30 23:59:59'")->fetchColumn();
+                    if ($compName !== 'Shakes and Dessert' || $orderCount < 18500 || $catCount < 11 || $coffersCount < 20 || $taxTipSum > 0 || $oldSeed > 0 || $decBreakMax > 3500 || $sawClosureCount > 0 || $recentSlumpAvg > 42000 || $otherExpCount === 0 || $walkInCount < 4000 || $smallOrderCount < 2500 || $decApr2024Avg > 12000) {
                         $needsSeed = true;
                     }
                 }
@@ -153,7 +154,8 @@ class Database {
                 $otherExpCount = (int)$pdo->query("SELECT COUNT(*) FROM expenditures WHERE category = 'Other'")->fetchColumn();
                 $walkInCount = (int)$pdo->query("SELECT COUNT(*) FROM orders WHERE customer_name = 'Walk-in Customer'")->fetchColumn();
                 $smallOrderCount = (int)$pdo->query("SELECT COUNT(*) FROM orders WHERE total_amount >= 300 AND total_amount <= 900")->fetchColumn();
-                if ($compName !== 'Shakes and Dessert' || $orderCount < 18500 || $catCount < 11 || $coffersCount < 20 || $taxTipSum > 0 || $oldSeed > 0 || $decBreakMax > 3500 || $sawClosureCount > 0 || $recentSlumpAvg > 42000 || $otherExpCount === 0 || $walkInCount < 4000 || $smallOrderCount < 2500) {
+                $decApr2024Avg = (float)$pdo->query("SELECT COALESCE(SUM(total_amount), 0) / 30.0 FROM orders WHERE branch_id = 3 AND created_at >= '2024-04-01 00:00:00' AND created_at <= '2024-04-30 23:59:59'")->fetchColumn();
+                if ($compName !== 'Shakes and Dessert' || $orderCount < 18500 || $catCount < 11 || $coffersCount < 20 || $taxTipSum > 0 || $oldSeed > 0 || $decBreakMax > 3500 || $sawClosureCount > 0 || $recentSlumpAvg > 42000 || $otherExpCount === 0 || $walkInCount < 4000 || $smallOrderCount < 2500 || $decApr2024Avg > 12000) {
                     $needsSeed = true;
                 }
             }
@@ -676,8 +678,19 @@ class Database {
                         : ($companyDailyTarget * $bCfg['weight']);
                 }
 
-                // Apply Dechemso monthly seasonality observed in the sales PDF (Jan peak -> Feb/Mar -> Apr pre-incident softening)
-                if ($bId === 3 && !$inDechemsoBreak && !$isRecentSlump) {
+                // Apply Dechemso monthly seasonality from both 2024 & 2025/2026 Sales PDFs
+                if ($bId === 3 && $year === 2024) {
+                    // Exact 2024 Dichemso Reconstructed Sales Report monthly curve (Apr dip 0.42x -> Aug 1.14x -> Nov 1.38x -> Dec peak 1.58x)
+                    $dec2024MonthWeights = [
+                        1 => 0.97, 2 => 1.07, 3 => 1.19, 4 => 0.42,
+                        5 => 0.68, 6 => 0.82, 7 => 0.92, 8 => 1.14,
+                        9 => 0.87, 10 => 1.06, 11 => 1.38, 12 => 1.58,
+                    ];
+                    if ($month === 11 || $month === 12) {
+                        $branchDailyTarget /= 1.08; // Replace generic festive boost with exact 2024 PDF Nov/Dec peaks
+                    }
+                    $branchDailyTarget *= ($dec2024MonthWeights[$month] ?? 1.0);
+                } elseif ($bId === 3 && !$inDechemsoBreak && !$isRecentSlump) {
                     $ymStr = $year . '-' . sprintf('%02d', $month);
                     if ($ymStr === '2026-01') {
                         $branchDailyTarget *= 1.14;
@@ -793,20 +806,22 @@ class Database {
                             ? 'Group / Event Table Order'
                             : (($ordType === 'Dine-In') ? 'Dine-In Customer Order' : "{$ordType} Counter Order");
 
-                        // Pick 4 distinct menu items (>= 50 GHc) weighted toward Crazy Shakes, Loaded Fries 150/180 & core PDF items
-                        // Splitting across 4 items keeps per-item quantities small and realistic!
-                        $crazyShakeIds = [22, 23, 24, 25, 26, 27, 28];
-                        $loadedFriesIds = [65, 66];
-                        $pdfCoreMixIds = [4, 10, 11, 13, 14, 16, 17, 18, 19, 20, 21, 29, 30, 38, 42, 43, 48, 55, 57, 58, 67, 69];
+                        // Weighted product pools infused directly from the 2024 Dichemso Sales by Product PDF & top sellers:
+                        // - Savory Heroes (#1/#2 in 2024 PDF): Loaded Fries (150/180), Chicken Wings & Fries (67), Cheesy Crepe (69)
+                        // - Shakes (#3/#4 in 2024 PDF): Crazy Shakes (22..27) + Regular/Large Vanilla, Strawberry & Chocolate Milkshakes (16..21)
+                        // - Cakes, Waffles, Mocktails & Slushies: Red Velvet Cake (29), Waffer Land (5), Taste The Music (58), Classic Mocktail (64), Strawberry Colada (60), etc.
+                        $savoryHeroIds = [65, 65, 66, 66, 67, 67, 68, 69];
+                        $shakeHeroIds = [22, 22, 24, 25, 26, 27, 23, 18, 18, 19, 20, 20, 21, 16, 17];
+                        $pdfDessertMocktailIds = [29, 29, 30, 5, 5, 6, 11, 12, 28, 35, 36, 38, 42, 43, 51, 55, 57, 58, 58, 59, 60, 64];
 
                         $pickedIds = [];
                         if ($targetSubtotal <= 900) {
                             // Small counter/walk-in order (GHS 300 - 900): 2 distinct items with 1-5 qty each
-                            $pickedIds[] = $pdfCoreMixIds[array_rand($pdfCoreMixIds)];
-                            $secondPool = (mt_rand(1, 100) <= 50) ? $crazyShakeIds : $loadedFriesIds;
+                            $pickedIds[] = $pdfDessertMocktailIds[array_rand($pdfDessertMocktailIds)];
+                            $secondPool = (mt_rand(1, 100) <= 50) ? $shakeHeroIds : $savoryHeroIds;
                             $cand2 = $secondPool[array_rand($secondPool)];
                             if ($cand2 === $pickedIds[0]) {
-                                $cand2 = $pdfCoreMixIds[array_rand($pdfCoreMixIds)];
+                                $cand2 = $pdfDessertMocktailIds[array_rand($pdfDessertMocktailIds)];
                             }
                             $pickedIds[] = $cand2;
 
@@ -826,21 +841,26 @@ class Database {
                             $lineItemsToInsert[] = [$pickedIds[0], $m1Info, $qty1, $sub1];
                             $lineItemsToInsert[] = [$pickedIds[1], $m2Info, $qty2, $sub2];
                         } else {
-                            // Medium/group order: 4 distinct items (>= 50 GHc) keeps per-item quantities small and realistic!
-                            $pickedIds[] = $crazyShakeIds[array_rand($crazyShakeIds)];
-                            $pickedIds[] = $loadedFriesIds[array_rand($loadedFriesIds)];
+                            // Medium/group order: 4 distinct items balancing Savory Heroes, Shakes, and Cakes/Waffles/Mocktails
+                            $pickedIds[] = $savoryHeroIds[array_rand($savoryHeroIds)];
+                            $pickedIds[] = $shakeHeroIds[array_rand($shakeHeroIds)];
                             $guard = 0;
-                            while (count($pickedIds) < 4 && $guard < 20) {
+                            while (count($pickedIds) < 4 && $guard < 25) {
                                 $guard++;
-                                $cand = (mt_rand(1, 100) <= 75)
-                                    ? $pdfCoreMixIds[array_rand($pdfCoreMixIds)]
-                                    : $crazyShakeIds[array_rand($crazyShakeIds)];
+                                $rPool = mt_rand(1, 100);
+                                if ($rPool <= 55) {
+                                    $cand = $pdfDessertMocktailIds[array_rand($pdfDessertMocktailIds)];
+                                } elseif ($rPool <= 80) {
+                                    $cand = $shakeHeroIds[array_rand($shakeHeroIds)];
+                                } else {
+                                    $cand = $savoryHeroIds[array_rand($savoryHeroIds)];
+                                }
                                 if (!in_array($cand, $pickedIds, true)) {
                                     $pickedIds[] = $cand;
                                 }
                             }
 
-                            $shares = [0.30, 0.28, 0.22, 0.20];
+                            $shares = [0.32, 0.28, 0.22, 0.18];
                             $remainingSub = $targetSubtotal;
                             $numPicked = count($pickedIds);
                             for ($pIdx = 0; $pIdx < $numPicked; $pIdx++) {

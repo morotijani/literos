@@ -9,7 +9,7 @@ const LiterosApp = (() => {
         appEnv: window.LITEROS_APP_ENV || 'development',
         isProduction: Boolean(window.LITEROS_IS_PRODUCTION),
         driver: 'mysql',
-        theme: 'dark',
+        theme: 'light',
         activeTab: 'pos',
         activeBranchId: 1,
         activeStaff: null,
@@ -261,11 +261,11 @@ const LiterosApp = (() => {
     }
 
     function initTheme() {
-        let saved = 'dark';
+        let saved = 'light';
         try {
-            saved = localStorage.getItem('literos_theme') || 'dark';
+            saved = localStorage.getItem('literos_theme') || 'light';
         } catch (_) {}
-        applyTheme(saved === 'light' ? 'light' : 'dark', false);
+        applyTheme(saved === 'dark' ? 'dark' : 'light', false);
     }
 
     function applyTheme(theme, notify = false) {
@@ -3480,47 +3480,339 @@ const LiterosApp = (() => {
         }
     }
 
-    function exportFullReportCsv() {
+    let reportExportFormat = 'excel';
+
+    function openReportExportModal(defaultFormat = 'excel') {
         if (!latestReportData || !Array.isArray(latestReportData.transactions)) {
             toast('Please run the report first', 'warning');
             return;
         }
-        const headers = [
-            'Order Number', 'Created At', 'Branch', 'Customer Name', 'Guests',
-            'Channel', 'Personnel', 'Payment Method', 'Payment Status', 'Order Status',
-            'Items Count', 'Subtotal', 'Discount', 'Tax', 'Service Charge', 'Tip', 'COGS', 'Gross Profit', 'Total Amount'
-        ];
-        const rows = latestReportData.transactions.map(o => [
-            o.order_number,
-            o.created_at,
-            `"${(o.branch_name || '').replace(/"/g, '""')}"`,
-            `"${(o.customer_name || '').replace(/"/g, '""')}"`,
-            o.guests_count,
-            o.order_type,
-            `"${(o.staff_name || '').replace(/"/g, '""')}"`,
-            o.payment_method,
-            o.payment_status,
-            o.status,
-            o.items_count || 0,
-            o.subtotal,
-            o.discount_amount,
-            o.tax_amount,
-            o.service_charge,
-            o.tip_amount,
-            o.order_cogs || 0,
-            o.gross_profit || 0,
-            o.total_amount
-        ]);
-        const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+        setReportExportFormat(defaultFormat);
+        toggleExportLedgerColumnOptions();
+        openModal('reportExportModal');
+    }
+
+    function setReportExportFormat(fmt) {
+        reportExportFormat = ['excel', 'pdf', 'csv'].includes(fmt) ? fmt : 'excel';
+        document.querySelectorAll('.rep-exp-fmt-btn').forEach(btn => {
+            const active = btn.dataset.fmt === reportExportFormat;
+            btn.className = `rep-exp-fmt-btn py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition ${
+                active
+                    ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-lg shadow-amber-500/20'
+                    : 'border-white/10 bg-slate-900 text-slate-300 hover:text-white'
+            }`;
+        });
+    }
+
+    function toggleAllExportTables(checked) {
+        document.querySelectorAll('input[name="exportTables"]').forEach(chk => {
+            chk.checked = Boolean(checked);
+        });
+        toggleExportLedgerColumnOptions();
+    }
+
+    function toggleExportLedgerColumnOptions() {
+        const txChk = document.getElementById('expTableTransactionsChk');
+        const colBox = document.getElementById('exportLedgerColumnOptions');
+        if (colBox && txChk) {
+            colBox.classList.toggle('hidden', !txChk.checked);
+        }
+    }
+
+    function getSelectedExportOptions() {
+        const tables = [];
+        document.querySelectorAll('input[name="exportTables"]:checked').forEach(chk => {
+            tables.push(chk.value);
+        });
+        const includeCustomer = document.getElementById('expColCustomer')?.checked !== false;
+        const includePersonnel = document.getElementById('expColPersonnel')?.checked !== false;
+        return { tables, includeCustomer, includePersonnel };
+    }
+
+    function buildReportExportDatasets(opts, currencyFmtFn) {
+        const selected = new Set(opts?.tables || ['kpis', 'branches', 'payments', 'items', 'staff', 'expenditures', 'transactions']);
+        const includeCustomer = opts?.includeCustomer !== false;
+        const includePersonnel = opts?.includePersonnel !== false;
+
+        const k = latestReportData.kpis || {};
+        const fmt = currencyFmtFn || ((v) => Number(v || 0).toFixed(2));
+        const datasets = [];
+
+        if (selected.has('kpis')) {
+            datasets.push({
+                key: 'kpis',
+                title: 'Executive Financial Summary',
+                sheetName: 'Executive KPIs',
+                headColor: [30, 41, 59],
+                head: ['Metric', 'Value', 'Metric', 'Value'],
+                rows: [
+                    ['Gross Revenue', fmt(k.gross_revenue), 'Net Operating Profit', `${fmt(k.net_operating_profit ?? k.gross_profit)} (${k.net_operating_margin_pct ?? 0}% Margin)`],
+                    ['Gross Profit (After COGS)', `${fmt(k.gross_profit)} (${k.gross_margin_pct ?? 0}% Margin)`, 'Total Operating Expenditures', `${fmt(k.total_expenditures)} (${k.expenditures_count || 0} vouchers)`],
+                    ['Total Dish COGS', fmt(k.total_cogs), 'Valid / Cancelled Orders', `${Number(k.valid_orders || 0).toLocaleString()} valid / ${Number(k.cancelled_orders || 0).toLocaleString()} cancelled`],
+                    ['Average Order Value (AOV)', fmt(k.avg_order_value), 'Average Daily Revenue', `${fmt(k.avg_daily_revenue)} (${k.active_days_count || 0} active days)`],
+                    ['Settled (Paid) Revenue', fmt(k.paid_amount), 'Unpaid / Open Tab', fmt(k.unpaid_amount)],
+                ]
+            });
+        }
+
+        if (selected.has('branches')) {
+            const branches = latestReportData.branch_performance || [];
+            if (branches.length > 0) {
+                datasets.push({
+                    key: 'branches',
+                    title: 'Branch Performance Summary',
+                    sheetName: 'Branch Summary',
+                    headColor: [180, 83, 9],
+                    head: ['Branch', 'Orders', 'Gross Revenue', 'Expenditures', 'Share %'],
+                    rows: branches.map(b => {
+                        const rev = Number(b.gross_revenue || 0);
+                        const share = k.gross_revenue > 0 ? ((rev / k.gross_revenue) * 100).toFixed(1) + '%' : '0.0%';
+                        return [b.branch_name || b.branch_code || 'Branch', Number(b.orders_count || 0), fmt(rev), fmt(b.expenditures || 0), share];
+                    })
+                });
+            }
+        }
+
+        if (selected.has('payments')) {
+            const payRows = (latestReportData.payment_breakdown || []).filter(p => Number(p.count || 0) > 0 || Number(p.amount || 0) > 0);
+            const chanRows = (latestReportData.order_type_breakdown || []).filter(c => Number(c.count || 0) > 0 || Number(c.amount || 0) > 0);
+            if (payRows.length > 0) {
+                datasets.push({
+                    key: 'payments',
+                    title: 'Payment Tender Breakdown',
+                    sheetName: 'Payment Tenders',
+                    headColor: [15, 23, 42],
+                    head: ['Payment Method', 'Transactions', 'Total Collected', 'Share %'],
+                    rows: payRows.map(p => {
+                        const amt = Number(p.amount || 0);
+                        const share = k.gross_revenue > 0 ? ((amt / k.gross_revenue) * 100).toFixed(1) + '%' : '0.0%';
+                        return [p.method, Number(p.count || 0), fmt(amt), share];
+                    })
+                });
+            }
+            if (chanRows.length > 0) {
+                datasets.push({
+                    key: 'channels',
+                    title: 'Order Channel Breakdown',
+                    sheetName: 'Order Channels',
+                    headColor: [14, 116, 144],
+                    head: ['Channel', 'Orders', 'Guests', 'Total Revenue'],
+                    rows: chanRows.map(c => [c.type, Number(c.count || 0), Number(c.guests || 0), fmt(c.amount || 0)])
+                });
+            }
+        }
+
+        if (selected.has('items')) {
+            const items = latestReportData.top_items || [];
+            if (items.length > 0) {
+                datasets.push({
+                    key: 'items',
+                    title: 'Item-Level Sales & Profit Breakdown',
+                    sheetName: 'Menu Items Profit',
+                    headColor: [4, 120, 87],
+                    head: ['#', 'Menu Item', 'Category', 'Units Sold', 'Revenue', 'COGS Cost', 'Net Profit'],
+                    rows: items.map((it, idx) => [
+                        idx + 1,
+                        it.item_name,
+                        it.category_name || 'General',
+                        Number(it.qty_sold ?? it.qty ?? 0),
+                        fmt(it.revenue || 0),
+                        fmt(it.cost ?? it.cogs ?? 0),
+                        fmt(it.profit || 0),
+                    ])
+                });
+            }
+        }
+
+        if (selected.has('staff')) {
+            const staffRows = latestReportData.staff_performance || [];
+            if (staffRows.length > 0) {
+                datasets.push({
+                    key: 'staff',
+                    title: 'Sales Personnel & Commission Audit',
+                    sheetName: 'Sales Personnel',
+                    headColor: [67, 56, 202],
+                    head: ['Personnel', 'Role', 'Orders', 'Gross Sales', 'Tips Collected', 'Commission Earned'],
+                    rows: staffRows.map(st => [
+                        st.staff_name,
+                        st.role,
+                        Number(st.orders_count || 0),
+                        fmt(st.gross_sales || 0),
+                        fmt(st.tips_collected || 0),
+                        fmt(st.commission_earned || 0),
+                    ])
+                });
+            }
+        }
+
+        if (selected.has('expenditures')) {
+            const expBreakdown = latestReportData.expenditure_breakdown || [];
+            if (expBreakdown.length > 0) {
+                datasets.push({
+                    key: 'expenditures_summary',
+                    title: 'Operating Expenditures by Category',
+                    sheetName: 'Expense Categories',
+                    headColor: [190, 18, 60],
+                    head: ['Expense Category', 'Vouchers', 'Total Amount'],
+                    rows: expBreakdown.map(ex => [ex.category, Number(ex.count || 0), fmt(ex.amount || 0)])
+                });
+            }
+            const expRows = latestReportData.expenditures || [];
+            if (expRows.length > 0) {
+                datasets.push({
+                    key: 'expenditures',
+                    title: `Operating Expenditure Vouchers (${expRows.length.toLocaleString()} Records)`,
+                    sheetName: 'Expenditure Vouchers',
+                    headColor: [159, 18, 57],
+                    head: ['Ref #', 'Date', 'Branch', 'Category', 'Title', 'Method', 'Amount'],
+                    rows: expRows.map(ex => [
+                        ex.reference_no,
+                        ex.expense_date,
+                        ex.branch_code || ex.branch_name || '',
+                        ex.category || '',
+                        ex.title || '',
+                        ex.payment_method || '',
+                        fmt(ex.amount || 0),
+                    ])
+                });
+            }
+        }
+
+        if (selected.has('transactions')) {
+            const txList = latestReportData.transactions || [];
+            const txHead = ['Order #', 'Date & Time', 'Branch'];
+            if (includeCustomer) txHead.push('Customer');
+            txHead.push('Channel');
+            if (includePersonnel) txHead.push('Personnel');
+            txHead.push('Tender', 'Status', 'Items', 'COGS', 'Gross Profit', 'Total');
+
+            const txRows = txList.map(o => {
+                const row = [o.order_number, o.created_at, o.branch_code || o.branch_name || ''];
+                if (includeCustomer) row.push(o.customer_name || 'Walk-in');
+                row.push(o.order_type || '');
+                if (includePersonnel) row.push(o.staff_name || '');
+                row.push(
+                    o.payment_method || '',
+                    `${o.status || ''}/${o.payment_status || ''}`,
+                    Number(o.items_count || 0),
+                    fmt(o.order_cogs || 0),
+                    fmt(o.gross_profit || 0),
+                    fmt(o.total_amount || 0)
+                );
+                return row;
+            });
+
+            datasets.push({
+                key: 'transactions',
+                title: `Detailed Sales Orders & Transactions Ledger (${txList.length.toLocaleString()} Records)`,
+                sheetName: 'Transactions Ledger',
+                headColor: [15, 23, 42],
+                head: txHead,
+                rows: txRows,
+                addPageBefore: true,
+                compact: true,
+            });
+        }
+
+        return datasets;
+    }
+
+    function submitReportExport(e) {
+        if (e) e.preventDefault();
+        const opts = getSelectedExportOptions();
+        if (opts.tables.length === 0) {
+            toast('Please select at least one table to export.', 'warning');
+            return;
+        }
+        closeModal('reportExportModal');
+        if (reportExportFormat === 'pdf') {
+            exportFullReportPdf(opts);
+        } else if (reportExportFormat === 'csv') {
+            exportFullReportCsv(opts);
+        } else {
+            exportFullReportExcel(opts);
+        }
+    }
+
+    function exportFullReportExcel(opts = null) {
+        if (!latestReportData || !Array.isArray(latestReportData.transactions)) {
+            toast('Please run the report first', 'warning');
+            return;
+        }
+        const resolvedOpts = opts || getSelectedExportOptions();
+        if (!window.XLSX) {
+            toast('Excel library unavailable offline — exporting selected tables as CSV instead', 'warning');
+            exportFullReportCsv(resolvedOpts);
+            return;
+        }
+
+        const datasets = buildReportExportDatasets(resolvedOpts, (v) => Number(Number(v || 0).toFixed(2)));
+        if (datasets.length === 0) {
+            toast('No data available for the selected tables.', 'warning');
+            return;
+        }
+
+        const wb = XLSX.utils.book_new();
+        datasets.forEach(ds => {
+            const aoa = [ds.head, ...ds.rows];
+            const ws = XLSX.utils.aoa_to_sheet(aoa);
+            ws['!cols'] = ds.head.map((h, colIdx) => {
+                let maxLen = String(h).length;
+                for (let r = 0; r < Math.min(ds.rows.length, 200); r++) {
+                    const cellLen = String(ds.rows[r][colIdx] ?? '').length;
+                    if (cellLen > maxLen) maxLen = cellLen;
+                }
+                return { wch: Math.min(44, Math.max(11, maxLen + 3)) };
+            });
+            const safeSheet = ds.sheetName.replace(/[\\/*?:[\]]/g, '').slice(0, 31);
+            XLSX.utils.book_append_sheet(wb, ws, safeSheet);
+        });
+
+        const compName = state.company?.name || 'Shakes and Dessert';
+        const slug = compName.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'literos';
+        XLSX.writeFile(wb, `${slug}_financial_report_${new Date().toISOString().slice(0, 10)}.xlsx`);
+        toast(`Exported ${datasets.length} selected table${datasets.length === 1 ? '' : 's'} to Excel (.xlsx)`);
+    }
+
+    function exportFullReportCsv(opts = null) {
+        if (!latestReportData || !Array.isArray(latestReportData.transactions)) {
+            toast('Please run the report first', 'warning');
+            return;
+        }
+        const resolvedOpts = opts || getSelectedExportOptions();
+        const datasets = buildReportExportDatasets(resolvedOpts, (v) => Number(v || 0).toFixed(2));
+        if (datasets.length === 0) {
+            toast('No data available for the selected tables.', 'warning');
+            return;
+        }
+
+        const csvCell = (val) => {
+            const s = String(val ?? '');
+            return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+        };
+
+        const blocks = datasets.map(ds => {
+            const lines = [];
+            if (datasets.length > 1) {
+                lines.push(csvCell(`=== ${ds.title} ===`));
+            }
+            lines.push(ds.head.map(csvCell).join(','));
+            ds.rows.forEach(r => lines.push(r.map(csvCell).join(',')));
+            return lines.join('\n');
+        });
+
+        const csv = blocks.join('\n\n');
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
-        link.download = `literos_financial_report_${new Date().toISOString().slice(0, 10)}.csv`;
+        const compName = state.company?.name || 'Shakes and Dessert';
+        const slug = compName.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'literos';
+        link.download = `${slug}_financial_report_${new Date().toISOString().slice(0, 10)}.csv`;
         link.click();
-        toast('Filtered financial report exported to CSV');
+        toast(`Exported ${datasets.length} selected table${datasets.length === 1 ? '' : 's'} to CSV`);
     }
 
-    function exportFullReportPdf() {
+    function exportFullReportPdf(opts = null) {
         if (!latestReportData || !Array.isArray(latestReportData.transactions)) {
             toast('Please run the report first', 'warning');
             return;
@@ -3530,6 +3822,18 @@ const LiterosApp = (() => {
         if (!JsPdfCtor) {
             toast('PDF library unavailable offline — opening Print / Save as PDF instead', 'warning');
             window.print();
+            return;
+        }
+
+        const resolvedOpts = opts || getSelectedExportOptions();
+        const comp = state.company || {};
+        const compName = comp.name || 'Shakes and Dessert';
+        const currencyLabel = (comp.currency_code || 'GHS').trim() || 'GHS';
+        const fmtMoney = (val) => `${currencyLabel} ${Number(val || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+        const datasets = buildReportExportDatasets(resolvedOpts, fmtMoney);
+        if (datasets.length === 0) {
+            toast('No data available for the selected tables.', 'warning');
             return;
         }
 
@@ -3544,12 +3848,9 @@ const LiterosApp = (() => {
             try {
                 const doc = new JsPdfCtor({ orientation: 'landscape', unit: 'pt', format: 'a4' });
                 const pageW = doc.internal.pageSize.getWidth();
+                const pageH = doc.internal.pageSize.getHeight();
                 const margin = 32;
                 const k = latestReportData.kpis || {};
-                const comp = state.company || {};
-                const compName = comp.name || 'Shakes and Dessert';
-                const currencyLabel = (comp.currency_code || 'GHS').trim() || 'GHS';
-                const fmtMoney = (val) => `${currencyLabel} ${Number(val || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
                 const fromDate = document.getElementById('repFromDate')?.value || 'All Start';
                 const toDate = document.getElementById('repToDate')?.value || 'Present';
@@ -3576,136 +3877,37 @@ const LiterosApp = (() => {
 
                 doc.setTextColor(203, 213, 225);
                 doc.setFontSize(8.5);
-                doc.text(`Period: ${fromDate} to ${toDate}  |  Branch: ${branchLabel}  |  Channel: ${channelVal}  |  Tender: ${payVal}  |  Matched Orders: ${Number(k.total_transactions || 0).toLocaleString()}`, margin, 61);
+                doc.text(`Period: ${fromDate} to ${toDate}  |  Branch: ${branchLabel}  |  Channel: ${channelVal}  |  Tender: ${payVal}  |  Tables: ${datasets.length}`, margin, 61);
 
                 let cursorY = 96;
 
-                // 1. Executive KPI Summary
-                doc.setTextColor(15, 23, 42);
-                doc.setFont('helvetica', 'bold');
-                doc.setFontSize(11);
-                doc.text('1. Executive Financial Summary', margin, cursorY);
+                datasets.forEach((ds, idx) => {
+                    if ((ds.addPageBefore && idx > 0) || cursorY > pageH - 95) {
+                        doc.addPage();
+                        cursorY = 36;
+                    }
 
-                doc.autoTable({
-                    startY: cursorY + 8,
-                    margin: { left: margin, right: margin },
-                    theme: 'grid',
-                    headStyles: { fillColor: [30, 41, 59], textColor: [248, 250, 252], fontSize: 8.5, fontStyle: 'bold' },
-                    bodyStyles: { fontSize: 8.5, textColor: [15, 23, 42] },
-                    head: [['Metric', 'Value', 'Metric', 'Value']],
-                    body: [
-                        ['Gross Revenue', fmtMoney(k.gross_revenue), 'Net Operating Profit', `${fmtMoney(k.net_operating_profit ?? k.gross_profit)} (${k.net_operating_margin_pct ?? 0}% Margin)`],
-                        ['Gross Profit (After COGS)', `${fmtMoney(k.gross_profit)} (${k.gross_margin_pct ?? 0}% Margin)`, 'Total Operating Expenditures', `${fmtMoney(k.total_expenditures)} (${k.expenditures_count || 0} vouchers)`],
-                        ['Total Dish COGS', fmtMoney(k.total_cogs), 'Valid / Cancelled Orders', `${Number(k.valid_orders || 0).toLocaleString()} valid / ${Number(k.cancelled_orders || 0).toLocaleString()} cancelled`],
-                        ['Average Order Value (AOV)', fmtMoney(k.avg_order_value), 'Average Daily Revenue', `${fmtMoney(k.avg_daily_revenue)} (${k.active_days_count || 0} active days)`],
-                        ['Settled (Paid) Revenue', fmtMoney(k.paid_amount), 'Unpaid / Open Tab', fmtMoney(k.unpaid_amount)],
-                    ],
-                });
-                cursorY = doc.lastAutoTable.finalY + 18;
-
-                // 2. Branch Performance & Payment Tender Breakdown
-                const branches = latestReportData.branch_performance || [];
-                if (branches.length > 0) {
+                    doc.setTextColor(15, 23, 42);
                     doc.setFont('helvetica', 'bold');
                     doc.setFontSize(11);
-                    doc.text('2. Branch Performance Summary', margin, cursorY);
+                    doc.text(`${idx + 1}. ${ds.title}`, margin, cursorY);
+
                     doc.autoTable({
                         startY: cursorY + 8,
-                        margin: { left: margin, right: margin },
-                        theme: 'striped',
-                        headStyles: { fillColor: [180, 83, 9], textColor: [255, 255, 255], fontSize: 8.5 },
-                        bodyStyles: { fontSize: 8.5, textColor: [15, 23, 42] },
-                        head: [['Branch', 'Orders', 'Gross Revenue', 'Expenditures', 'Share %']],
-                        body: branches.map(b => {
-                            const rev = Number(b.gross_revenue || 0);
-                            const share = k.gross_revenue > 0 ? ((rev / k.gross_revenue) * 100).toFixed(1) + '%' : '0.0%';
-                            return [b.branch_name || b.branch_code || 'Branch', Number(b.orders_count || 0).toLocaleString(), fmtMoney(rev), fmtMoney(b.expenditures || 0), share];
-                        }),
+                        margin: { left: margin, right: margin, bottom: 34 },
+                        theme: ds.compact || ds.key === 'kpis' ? 'grid' : 'striped',
+                        headStyles: { fillColor: ds.headColor || [15, 23, 42], textColor: [248, 250, 252], fontSize: ds.compact ? 7.5 : 8.5, fontStyle: 'bold' },
+                        bodyStyles: { fontSize: ds.compact ? 7.2 : 8.2, textColor: [15, 23, 42], cellPadding: ds.compact ? 3.5 : 4.5 },
+                        alternateRowStyles: { fillColor: [248, 250, 252] },
+                        head: [ds.head],
+                        body: ds.rows,
                     });
+
                     cursorY = doc.lastAutoTable.finalY + 18;
-                }
-
-                const payRows = (latestReportData.payment_breakdown || []).filter(p => Number(p.count || 0) > 0 || Number(p.amount || 0) > 0);
-                if (payRows.length > 0) {
-                    doc.setFont('helvetica', 'bold');
-                    doc.setFontSize(11);
-                    doc.text('3. Payment Tender Breakdown', margin, cursorY);
-                    doc.autoTable({
-                        startY: cursorY + 8,
-                        margin: { left: margin, right: margin },
-                        theme: 'striped',
-                        headStyles: { fillColor: [15, 23, 42], textColor: [248, 250, 252], fontSize: 8.5 },
-                        bodyStyles: { fontSize: 8.5, textColor: [15, 23, 42] },
-                        head: [['Payment Method', 'Transactions', 'Total Collected', 'Share %']],
-                        body: payRows.map(p => {
-                            const amt = Number(p.amount || 0);
-                            const share = k.gross_revenue > 0 ? ((amt / k.gross_revenue) * 100).toFixed(1) + '%' : '0.0%';
-                            return [p.method, Number(p.count || 0).toLocaleString(), fmtMoney(amt), share];
-                        }),
-                    });
-                    cursorY = doc.lastAutoTable.finalY + 18;
-                }
-
-                // 4. Top Selling Menu Items (Top 15)
-                const topItems = (latestReportData.top_items || []).slice(0, 15);
-                if (topItems.length > 0) {
-                    doc.setFont('helvetica', 'bold');
-                    doc.setFontSize(11);
-                    doc.text('4. Top Selling Menu Items (Top 15)', margin, cursorY);
-                    doc.autoTable({
-                        startY: cursorY + 8,
-                        margin: { left: margin, right: margin },
-                        theme: 'striped',
-                        headStyles: { fillColor: [4, 120, 87], textColor: [255, 255, 255], fontSize: 8.5 },
-                        bodyStyles: { fontSize: 8, textColor: [15, 23, 42] },
-                        head: [['#', 'Menu Item', 'Category', 'Units Sold', 'Revenue', 'Profit']],
-                        body: topItems.map((it, idx) => [
-                            idx + 1,
-                            it.item_name,
-                            it.category_name || 'General',
-                            Number(it.qty || 0).toLocaleString(),
-                            fmtMoney(it.revenue),
-                            fmtMoney(it.profit),
-                        ]),
-                    });
-                    cursorY = doc.lastAutoTable.finalY + 18;
-                }
-
-                // 5. Detailed Sales Orders Ledger
-                const txList = latestReportData.transactions || [];
-                doc.addPage();
-                doc.setFont('helvetica', 'bold');
-                doc.setFontSize(11);
-                doc.setTextColor(15, 23, 42);
-                doc.text(`5. Detailed Sales Orders & Transactions Ledger (${txList.length.toLocaleString()} Records)`, margin, 36);
-
-                doc.autoTable({
-                    startY: 46,
-                    margin: { left: margin, right: margin, bottom: 34 },
-                    theme: 'grid',
-                    headStyles: { fillColor: [15, 23, 42], textColor: [248, 250, 252], fontSize: 7.5, fontStyle: 'bold' },
-                    bodyStyles: { fontSize: 7.2, textColor: [15, 23, 42], cellPadding: 3.5 },
-                    alternateRowStyles: { fillColor: [248, 250, 252] },
-                    head: [['Order #', 'Date & Time', 'Branch', 'Customer', 'Channel', 'Staff', 'Tender', 'Status', 'Items', 'COGS', 'Gross Profit', 'Total']],
-                    body: txList.map(o => [
-                        o.order_number,
-                        o.created_at,
-                        o.branch_code || o.branch_name || '',
-                        o.customer_name || 'Walk-in',
-                        o.order_type || '',
-                        o.staff_name || '',
-                        o.payment_method || '',
-                        `${o.status || ''}/${o.payment_status || ''}`,
-                        o.items_count || 0,
-                        fmtMoney(o.order_cogs || 0),
-                        fmtMoney(o.gross_profit || 0),
-                        fmtMoney(o.total_amount || 0),
-                    ]),
                 });
 
                 // Page Footer Numbering
                 const pageCount = doc.internal.getNumberOfPages();
-                const pageH = doc.internal.pageSize.getHeight();
                 for (let p = 1; p <= pageCount; p++) {
                     doc.setPage(p);
                     doc.setFont('helvetica', 'normal');
@@ -3717,7 +3919,7 @@ const LiterosApp = (() => {
 
                 const slug = compName.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'literos';
                 doc.save(`${slug}_financial_report_${new Date().toISOString().slice(0, 10)}.pdf`);
-                toast(`Exported ${txList.length.toLocaleString()} transactions to PDF`);
+                toast(`Exported ${datasets.length} selected table${datasets.length === 1 ? '' : 's'} to PDF`);
             } catch (err) {
                 toast(`PDF export error: ${err.message}`, 'error');
             } finally {
@@ -3758,7 +3960,7 @@ const LiterosApp = (() => {
                 document.getElementById('posSearchInput')?.focus();
             }
             if (e.key === 'Escape') {
-                ['modifierModal', 'checkoutModal', 'receiptModal', 'menuItemModal', 'categoryModal', 'staffModal', 'branchModal', 'tableModal', 'pinModal', 'expenditureModal', 'cofferModal']
+                ['modifierModal', 'checkoutModal', 'receiptModal', 'menuItemModal', 'categoryModal', 'staffModal', 'branchModal', 'tableModal', 'pinModal', 'expenditureModal', 'cofferModal', 'reportExportModal']
                     .forEach(id => closeModal(id));
             }
         });
@@ -3855,6 +4057,12 @@ const LiterosApp = (() => {
         loadReportsData,
         setReportPage,
         setReportPageSize,
+        openReportExportModal,
+        setReportExportFormat,
+        toggleAllExportTables,
+        toggleExportLedgerColumnOptions,
+        submitReportExport,
+        exportFullReportExcel,
         exportFullReportCsv,
         exportFullReportPdf,
         openModal,
